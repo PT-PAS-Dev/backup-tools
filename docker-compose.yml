@@ -9,10 +9,6 @@ services:
       - ./config.yaml:/app/config.yaml:ro
       - ./oauth-client.json:/app/oauth-client.json:ro
       - ./token.json:/app/token.json
-      - ./backup.py:/app/backup.py:ro
-      - ./auth.py:/app/auth.py:ro
-      - ./drive_auth.py:/app/drive_auth.py:ro
-      - ./paths.py:/app/paths.py:ro
       - ./state:/app/state
     extra_hosts:
       - "host.docker.internal:host-gateway"

@@ -58,6 +58,13 @@ Ini bukan binlog MySQL. Kalau InnoDB tidak mengisi `UPDATE_TIME` dan update bari
 
 ## File config
 
+`.env` dan `config.yaml` **tidak** di-git. Salin dari contoh lalu isi di setiap host:
+
+```bash
+cp .env.example .env
+cp config.example.yaml config.yaml
+```
+
 - `.env` — `GDRIVE_FOLDER_ID`, retensi
 - `config.yaml` — host MySQL, user, password, database
 - `oauth-client.json` + `token.json` — OAuth
