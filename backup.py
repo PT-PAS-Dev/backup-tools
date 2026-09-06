@@ -358,18 +358,27 @@ def fingerprint_fields(meta: dict[str, Any]) -> dict[str, Any]:
 
 
 def load_state(path: Path) -> dict[str, Any]:
-    if not path.is_file() or path.stat().st_size == 0:
-        return {}
     try:
+        if not path.is_file() or path.stat().st_size == 0:
+            return {}
         data = json.loads(path.read_text())
+    except OSError as exc:
+        log.warning("Cannot read state file %s (%s); starting empty", path, exc)
+        return {}
     except json.JSONDecodeError:
         return {}
     return data if isinstance(data, dict) else {}
 
 
 def save_state(path: Path, state: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, indent=2, default=str))
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(state, indent=2, default=str))
+    except OSError as exc:
+        raise BackupError(
+            f"Cannot write state file {path}: {exc}. "
+            "On the host run: chmod -R a+rwX state"
+        ) from exc
 
 
 def escape_drive_query(value: str) -> str:

@@ -9,7 +9,10 @@ services:
       - ./config.yaml:/app/config.yaml:ro
       - ./oauth-client.json:/app/oauth-client.json:ro
       - ./token.json:/app/token.json
-      - ./state:/app/state
+      - backup-state:/app/state
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
+
+volumes:
+  backup-state:
