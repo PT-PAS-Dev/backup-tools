@@ -20,7 +20,16 @@ docker compose up -d --build
 docker compose exec backup python /app/backup.py
 ```
 
-Jadwal `0 0 * * *` jalan di dalam container (supercronic, timezone `Asia/Jakarta`).
+Pilih database tertentu:
+
+```bash
+docker compose exec backup python /app/backup.py --list
+docker compose exec backup python /app/backup.py -d lab_report
+docker compose exec backup python /app/backup.py -d kocak_2 -d app_mixer_v2_4
+docker compose exec -it backup python /app/backup.py --pick
+```
+
+Jadwal `0 0 * * *` (00.00 WIB) tetap mem-backup **semua** database di `config.yaml`.
 
 Login Google ulang (hanya jika token hilang):
 

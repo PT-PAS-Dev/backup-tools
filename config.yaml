@@ -5,4 +5,7 @@ connections:
     user: dev
     password: "@n0b1t4s4n"
     databases:
+      - kocak_2
+      - app_mixer_v2_4
       - lab_report
+      - noodle_friyer

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import os
@@ -10,7 +11,7 @@ import re
 import shutil
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -166,6 +167,86 @@ def load_connections(config_path: Path) -> list[Connection]:
             )
         )
     return connections
+
+
+def configured_databases(connections: list[Connection]) -> list[str]:
+    names: list[str] = []
+    for connection in connections:
+        for database in connection.databases:
+            if database.name not in names:
+                names.append(database.name)
+    return names
+
+
+def filter_connections(connections: list[Connection], selected: list[str]) -> list[Connection]:
+    wanted = set(selected)
+    known = set(configured_databases(connections))
+    missing = sorted(wanted - known)
+    if missing:
+        raise BackupError(
+            "Database tidak ada di config.yaml: "
+            + ", ".join(missing)
+            + ". Yang tersedia: "
+            + ", ".join(configured_databases(connections))
+        )
+    filtered: list[Connection] = []
+    for connection in connections:
+        databases = [item for item in connection.databases if item.name in wanted]
+        if databases:
+            filtered.append(replace(connection, databases=databases))
+    if not filtered:
+        raise BackupError("Tidak ada koneksi yang punya database tersebut")
+    return filtered
+
+
+def pick_databases(names: list[str]) -> list[str]:
+    print("Pilih database yang akan di-backup:")
+    for index, name in enumerate(names, start=1):
+        print(f"  {index}) {name}")
+    print("  0) semua")
+    raw = input("Nomor (boleh beberapa, pisah koma): ").strip()
+    if not raw or raw == "0":
+        return names
+    chosen: list[str] = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            index = int(part)
+        except ValueError as exc:
+            raise BackupError(f"Pilihan tidak valid: {part}") from exc
+        if index < 1 or index > len(names):
+            raise BackupError(f"Pilihan tidak valid: {part}")
+        name = names[index - 1]
+        if name not in chosen:
+            chosen.append(name)
+    if not chosen:
+        raise BackupError("Tidak ada database yang dipilih")
+    return chosen
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Backup MySQL per tabel ke Google Drive")
+    parser.add_argument(
+        "-d",
+        "--database",
+        action="append",
+        dest="databases",
+        metavar="NAMA",
+        help="Backup database ini saja (boleh diulang). Default: semua di config.yaml",
+    )
+    parser.add_argument(
+        "--list",
+        action="store_true",
+        help="Tampilkan daftar database di config.yaml lalu keluar",
+    )
+    parser.add_argument(
+        "--pick",
+        action="store_true",
+        help="Pilih database secara interaktif",
+    )
+    return parser.parse_args(argv)
 
 
 def ident(name: str) -> str:
@@ -536,7 +617,8 @@ def backup_connection(
     return errors
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     now = datetime.now(JAKARTA)
     date_folder = now.strftime("%d%m%Y")
     config_path = Path(os.environ.get("CONFIG_PATH", str(PROJECT_ROOT / "config.yaml")))
@@ -547,10 +629,31 @@ def main() -> int:
     state_path = Path(os.environ.get("STATE_PATH", str(PROJECT_ROOT / "state" / "fingerprints.json")))
     state = load_state(state_path)
 
+    try:
+        connections = load_connections(config_path)
+        available = configured_databases(connections)
+        if args.list:
+            print("Database di config.yaml:")
+            for name in available:
+                print(f"  {name}")
+            return 0
+        if args.pick:
+            selected = pick_databases(available)
+            connections = filter_connections(connections, selected)
+        elif args.databases:
+            connections = filter_connections(connections, args.databases)
+            selected = args.databases
+        else:
+            selected = available
+    except BackupError as exc:
+        log.error("%s", exc)
+        return 1
+
     log.info(
-        "Mulai backup %s (Asia/Jakarta) mode=%s",
+        "Mulai backup %s (Asia/Jakarta) mode=%s database=%s",
         date_folder,
         "incremental" if incremental else "full",
+        ", ".join(selected),
     )
     errors: list[str] = []
     table_logs: list[TableLog] = []
@@ -558,7 +661,6 @@ def main() -> int:
     drive: DriveClient | None = None
 
     try:
-        connections = load_connections(config_path)
         drive = DriveClient(folder_id)
     except BackupError as exc:
         log.error("%s", exc)
