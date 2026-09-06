@@ -17,9 +17,9 @@ def load_project_env() -> None:
             os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
     os.environ.setdefault("TZ", "Asia/Jakarta")
-    os.environ.setdefault("CONFIG_PATH", str(PROJECT_ROOT / "config.yaml"))
-    os.environ.setdefault("GOOGLE_OAUTH_CLIENT", str(PROJECT_ROOT / "oauth-client.json"))
-    os.environ.setdefault("GOOGLE_OAUTH_TOKEN", str(PROJECT_ROOT / "token.json"))
+    os.environ.setdefault("CONFIG_PATH", str(PROJECT_ROOT / "config" / "config.yaml"))
+    os.environ.setdefault("GOOGLE_OAUTH_CLIENT", str(PROJECT_ROOT / "config" / "oauth-client.json"))
+    os.environ.setdefault("GOOGLE_OAUTH_TOKEN", str(PROJECT_ROOT / "config" / "token.json"))
     os.environ.setdefault("BACKUP_DIR", str(PROJECT_ROOT / "tmp"))
     os.environ.setdefault("STATE_PATH", str(PROJECT_ROOT / "state" / "fingerprints.json"))
     os.environ.setdefault("OAUTH_PORT", "8080")

@@ -5,14 +5,17 @@ services:
     env_file: .env
     environment:
       TZ: Asia/Jakarta
+      CONFIG_PATH: config/config.yaml
+      GOOGLE_OAUTH_CLIENT: config/oauth-client.json
+      GOOGLE_OAUTH_TOKEN: config/token.json
+      STATE_PATH: state/fingerprints.json
     volumes:
-      - ./config.yaml:/app/config.yaml:ro
-      - ./oauth-client.json:/app/oauth-client.json:ro
-      - ./token.json:/app/token.json
+      - backup-config:/app/config
       - backup-state:/app/state
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
 volumes:
+  backup-config:
   backup-state:

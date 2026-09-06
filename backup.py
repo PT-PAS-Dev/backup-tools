@@ -136,10 +136,20 @@ def parse_databases(raw: Any, connection_name: str) -> list[DatabaseTarget]:
 
 
 def load_connections(config_path: Path) -> list[Connection]:
-    if not config_path.is_file():
-        raise BackupError(f"Config file not found: {config_path}")
+    try:
+        if not config_path.is_file():
+            raise BackupError(
+                f"Config file not found: {config_path}. "
+                "Run: ./scripts/load-secrets.sh"
+            )
+        raw_config = config_path.read_text()
+    except OSError as exc:
+        raise BackupError(
+            f"Cannot read config file {config_path}: {exc}. "
+            "Run: ./scripts/load-secrets.sh"
+        ) from exc
 
-    data = yaml.safe_load(config_path.read_text()) or {}
+    data = yaml.safe_load(raw_config) or {}
     raw_connections = data.get("connections")
     if not raw_connections:
         raise BackupError("config.yaml must contain a non-empty connections list")

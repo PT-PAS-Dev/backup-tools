@@ -13,12 +13,20 @@ Dump MySQL **satu file per tabel** setiap jam **00.00 Asia/Jakarta**, lalu ungga
 
 ## Setup
 
-Token Google (`token.json`) dan `config.yaml` yang sudah jalan bisa dipakai lagi.
+`.env` dan `config.yaml` **tidak** di-git. Salin dari contoh lalu isi di setiap host:
 
 ```bash
+cp .env.example .env
+cp config.example.yaml config.yaml
+# oauth-client.json + token.json dari Google OAuth
+./scripts/load-secrets.sh
 docker compose up -d --build
 docker compose exec backup python /app/backup.py
 ```
+
+`load-secrets.sh` menyalin `config.yaml`, `oauth-client.json`, dan `token.json` ke Docker volume (bukan bind-mount dari NFS/home, supaya tidak kena `Permission denied`).
+
+Setelah mengubah `config.yaml` atau OAuth di host, jalankan lagi `./scripts/load-secrets.sh` lalu `docker compose restart backup`.
 
 Pilih database tertentu:
 
@@ -58,16 +66,11 @@ Ini bukan binlog MySQL. Kalau InnoDB tidak mengisi `UPDATE_TIME` dan update bari
 
 ## File config
 
-`.env` dan `config.yaml` **tidak** di-git. Salin dari contoh lalu isi di setiap host:
-
-```bash
-cp .env.example .env
-cp config.example.yaml config.yaml
-```
-
-- `.env` — `GDRIVE_FOLDER_ID`, retensi
+- `.env` — `GDRIVE_FOLDER_ID`, retensi (dibaca Docker di host)
 - `config.yaml` — host MySQL, user, password, database
 - `oauth-client.json` + `token.json` — OAuth
+
+Di container, tiga file terakhir disimpan di volume `backup-config` (`/app/config/`), diisi lewat `./scripts/load-secrets.sh`.
 
 Password yang mengandung `@` harus diapit tanda kutip. Samakan dengan yang dipakai aplikasi (misalnya `MAGANG_DB_PASSWORD` di newpas).
 
