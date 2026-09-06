@@ -1,0 +1,17 @@
+connections:
+  - name: server_a
+    host: 192.168.1.10
+    port: 3306
+    user: backup
+    password: "secret"
+    databases:
+      - kocak_2
+      - lab_report
+  - name: server_b
+    host: mysql.example.com
+    port: 3306
+    user: backup
+    password: "secret"
+    databases:
+      - name: lab_report
+        folder: lab_report_b
