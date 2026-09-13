@@ -9,7 +9,7 @@ URL: `http://localhost:8095` · service Docker: `docker compose up monitor` (ter
 | Istilah | Maksud |
 |---------|--------|
 | **Dashboard Clone DB** | Halaman web port 8095 di host (8090 di dalam container) |
-| **Password MySQL clone** | `CLONE_MYSQL_PASSWORD_CLONE_13_30` / `…_13_31` — sesuai nama node di `config.yaml` |
+| **Kredensial MySQL** | Hanya `.env` — lihat tabel di bagian Configuration |
 | **User replikasi** | `CLONE_REPL_*` — akun di **master** `.94` untuk slave connect |
 
 Nama env lama `MONITOR_*` masih didukung.
@@ -85,15 +85,17 @@ Put that user in `.env` as `CLONE_REPL_USER` / `CLONE_REPL_PASSWORD`.
 
 Add a `topology` block to `config.yaml` (see `config.example.yaml`). Source can reuse a backup `connections[]` entry via `connection: mypas`.
 
-`.env`:
+**User/password MySQL tidak disimpan di `config.yaml`** — hanya di `.env` (service `backup` + `monitor` memakai `env_file: .env`).
 
-```text
-CLONE_REPL_USER=repl
-CLONE_REPL_PASSWORD=...
-CLONE_MYSQL_PASSWORD_CLONE_13_30=...   # 172.21.13.30
-CLONE_MYSQL_PASSWORD_CLONE_13_31=...   # 172.21.13.31
-CLONE_SSH_PASSWORD=...              # password SSH user development di clone
-```
+| Target | Variabel `.env` |
+|--------|------------------|
+| Backup + master via `connection: mypas` | `MYSQL_USER_MYPAS`, `MYSQL_PASSWORD_MYPAS` |
+| Clone `clone-13-30` | `CLONE_MYSQL_USER_CLONE_13_30`, `CLONE_MYSQL_PASSWORD_CLONE_13_30` |
+| Clone `clone-13-31` | `CLONE_MYSQL_USER_CLONE_13_31`, `CLONE_MYSQL_PASSWORD_CLONE_13_31` |
+| Replikasi ke master | `CLONE_REPL_USER`, `CLONE_REPL_PASSWORD` |
+| SSH ke clone | `CLONE_SSH_PASSWORD` |
+
+Nama env = prefix + **nama node/connection** dari YAML (huruf besar, `-` jadi `_`). `MONITOR_*` / password di YAML masih didukung sebagai fallback, tidak disarankan.
 
 `docker compose` bind-mount `config.yaml` ke container dashboard. Setelah ubah topology: `docker compose restart monitor`. Backup Drive: `./scripts/load-secrets.sh` jika perlu.
 

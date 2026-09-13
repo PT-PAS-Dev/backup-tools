@@ -1,23 +1,13 @@
+# User/password MySQL: hanya di .env (lihat .env.example), bukan di file ini.
+
 connections:
-  - name: server_a
-    host: 192.168.1.10
+  - name: mypas
+    host: 172.21.5.94
     port: 3306
-    user: backup
-    password: "secret"
     databases:
       - kocak_2
       - lab_report
-  - name: server_b
-    host: mysql.example.com
-    port: 3306
-    user: backup
-    password: "secret"
-    databases:
-      - name: lab_report
-        folder: lab_report_b
 
-# Clone monitor topology. Source stays production master (read/write).
-# Clone passwords: MONITOR_MYSQL_PASSWORD_<NAME> in .env (see CLONE.md).
 topology:
   source:
     name: master-94
@@ -25,7 +15,7 @@ topology:
     port: 3306
     role: source
     os: windows
-    user: backup
+    connection: mypas
     label: PRODUCTION MASTER
   clones:
     - name: clone-13-30
@@ -34,10 +24,10 @@ topology:
       role: clone
       os: linux
       replicate_from: master-94
-      user: monitor
-      ssh_user: ubuntu
+      ssh_user: development
       ssh_port: 22
       docker_container: mariadb-server
+      docker_sudo: true
       label: DATABASE CLONE
     - name: clone-13-31
       host: 172.21.13.31
@@ -45,8 +35,7 @@ topology:
       role: clone
       os: linux
       replicate_from: clone-13-30
-      user: monitor
-      ssh_user: ubuntu
+      ssh_user: development
       ssh_port: 22
       label: DATABASE CLONE
 

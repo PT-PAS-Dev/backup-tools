@@ -198,12 +198,17 @@ def _apply_backup_connection(node: Node, connections: list[dict[str, Any]]) -> N
                 break
     if not match:
         return
-    if not node.user:
+    conn_name = str(match.get("name") or "")
+    env_user = _opt_env(env_key("MYSQL_USER", conn_name))
+    env_password = _opt_env(env_key("MYSQL_PASSWORD", conn_name))
+    if env_user:
+        node.user = env_user
+    elif not node.user:
         node.user = str(match.get("user") or "")
-    if not node.password:
-        conn_name = str(match.get("name") or "")
-        env_password = os.environ.get(env_key("MYSQL_PASSWORD", conn_name))
-        node.password = env_password if env_password is not None else str(match.get("password") or "")
+    if env_password:
+        node.password = env_password
+    elif not node.password:
+        node.password = str(match.get("password") or "")
 
 
 def load_topology(config_path: Path | None = None) -> Topology:

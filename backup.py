@@ -111,9 +111,16 @@ def write_backup_log(path: Path, date_folder: str, started: datetime, entries: l
     path.write_text("\n".join(lines) + "\n")
 
 
+def _connection_env_suffix(connection_name: str) -> str:
+    return "".join(c if c.isalnum() else "_" for c in connection_name).upper()
+
+
 def env_name(connection_name: str) -> str:
-    normalized = "".join(c if c.isalnum() else "_" for c in connection_name).upper()
-    return f"MYSQL_PASSWORD_{normalized}"
+    return f"MYSQL_PASSWORD_{_connection_env_suffix(connection_name)}"
+
+
+def env_user_name(connection_name: str) -> str:
+    return f"MYSQL_USER_{_connection_env_suffix(connection_name)}"
 
 
 def parse_databases(raw: Any, connection_name: str) -> list[DatabaseTarget]:
@@ -158,9 +165,13 @@ def load_connections(config_path: Path) -> list[Connection]:
     for raw in raw_connections:
         name = str(raw.get("name") or raw.get("host") or "default")
         host = raw.get("host")
-        user = raw.get("user")
-        if not host or not user:
-            raise BackupError(f"Connection {name!r} needs host and user")
+        user = (os.environ.get(env_user_name(name)) or str(raw.get("user") or "")).strip()
+        if not host:
+            raise BackupError(f"Connection {name!r} needs host")
+        if not user:
+            raise BackupError(
+                f"Connection {name!r} needs user in config or env {env_user_name(name)!r}"
+            )
 
         password = os.environ.get(env_name(name))
         if password is None:

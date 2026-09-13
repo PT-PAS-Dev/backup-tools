@@ -13,7 +13,7 @@ Dump MySQL **satu file per tabel** setiap jam **00.00 Asia/Jakarta**, lalu ungga
 
 ## Setup
 
-`.env` dan `config.yaml` **tidak** di-git. Salin dari contoh lalu isi di setiap host:
+`.env` dan `config.yaml` **tidak** di-git. **User/password MySQL hanya di `.env`** (`MYSQL_USER_*` / `MYSQL_PASSWORD_*` untuk backup, `CLONE_MYSQL_*` untuk clone). Salin dari contoh lalu isi di setiap host:
 
 ```bash
 cp .env.example .env
