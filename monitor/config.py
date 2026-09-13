@@ -209,6 +209,12 @@ def _apply_backup_connection(node: Node, connections: list[dict[str, Any]]) -> N
 def load_topology(config_path: Path | None = None) -> Topology:
     path = config_path or resolve_config_path()
     topology = Topology(config_path=path)
+    if path.is_dir():
+        topology.missing = (
+            f"Config path is a directory, not a file: {path}. "
+            "Remove it on the host and create config.yaml (see config.example.yaml)."
+        )
+        return topology
     if not path.is_file():
         topology.missing = f"Config file not found: {path}"
         return topology

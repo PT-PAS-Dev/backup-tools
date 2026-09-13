@@ -27,5 +27,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backup.py auth.py drive_auth.py paths.py crontab ./
 COPY monitor /app/monitor
+COPY scripts/monitor-entrypoint.sh /app/scripts/monitor-entrypoint.sh
+RUN chmod +x /app/scripts/monitor-entrypoint.sh
 
 CMD ["supercronic", "-passthrough-logs", "-no-reap", "/app/crontab"]

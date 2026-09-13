@@ -2,13 +2,13 @@
 
 Web internal untuk **clone** MariaDB production dan **pantau replikasi**. Bukan cutover, failover, atau migrasi Laravel.
 
-URL: `http://localhost:8090` · service Docker: `docker compose up monitor` (terpisah dari backup Drive)
+URL: `http://localhost:8095` · service Docker: `docker compose up monitor` (terpisah dari backup Drive)
 
 ### Istilah singkat
 
 | Istilah | Maksud |
 |---------|--------|
-| **Dashboard Clone DB** | Halaman web port 8090 (dulu disebut “monitor” di kode) |
+| **Dashboard Clone DB** | Halaman web port 8095 di host (8090 di dalam container) |
 | **Password MySQL clone-96** | `CLONE_MYSQL_PASSWORD_CLONE_96` — login ke MariaDB di `.96` |
 | **User replikasi** | `CLONE_REPL_*` — akun di **master** `.94` untuk slave connect |
 

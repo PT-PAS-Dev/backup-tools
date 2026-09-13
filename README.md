@@ -80,13 +80,17 @@ User harus bisa login dari IP Docker/Mac ke server. Privilege: `SELECT`, `SHOW V
 
 ## Dashboard Clone DB
 
-Web **pemantauan clone & replikasi** (bukan cutover) di port **8090**: topology `.94 → .96 → .98`, koneksi MySQL, lag, verifikasi, riwayat, peringatan, dan start clone per database.
+Web **pemantauan clone & replikasi** (bukan cutover) di port **8095** (host): topology `.94 → .96 → .98`, koneksi MySQL, lag, verifikasi, riwayat, peringatan, dan start clone per database.
 
-Lihat [CLONE.md](CLONE.md). Setelah menambah blok `topology` di `config.yaml`:
+Lihat [CLONE.md](CLONE.md). Di server (pertama kali):
 
 ```bash
+cp .env.example .env          # isi GDRIVE_*, CLONE_* (lihat CLONE.md)
+cp config.example.yaml config.yaml   # edit topology + connections
 docker compose up -d --build
-# buka http://localhost:8090
+# buka http://<server>:8095
 ```
+
+File `.env` tidak di-git; tanpa `.env`, `docker compose` versi lama gagal — buat dari `.env.example`.
 
 Dashboard membaca `config.yaml` di host (bind-mount). Backup Drive tetap terpisah; setelah ubah secret backup jalankan `./scripts/load-secrets.sh`.
