@@ -20,32 +20,11 @@ _job_lock = threading.Lock()
 
 STREAM_FILTER = r"""
 import os, sys, subprocess, base64
-header_path = os.environ["CLONE_HEADER"]
-cnf = os.environ["CLONE_MYSQL_CNF"]
-docker_inner = os.environ.get("CLONE_DOCKER_IMPORT_INNER", "").strip()
-sudo_b64 = os.environ.get("CLONE_SUDO_PW_B64", "").strip()
-if docker_inner:
-    if sudo_b64:
-        proc = subprocess.Popen(
-            ["sudo", "-S", "-p", "", "sh", "-c", docker_inner],
-            stdin=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        assert proc.stdin is not None
-        proc.stdin.write(base64.b64decode(sudo_b64) + b"\n")
-    else:
-        proc = subprocess.Popen(
-            ["sh", "-c", docker_inner],
-            stdin=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-else:
-    mysql_bin = os.environ.get("CLONE_MYSQL_BIN", "mysql")
-    proc = subprocess.Popen(
-        [mysql_bin, "--defaults-extra-file=" + cnf],
-        stdin=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
+
+def _fail(msg, rc=1):
+    sys.stderr.write(msg[:4000] + ("\n" if msg and not msg.endswith("\n") else ""))
+    raise SystemExit(rc)
+
 def _rewrite_row_format(chunk: bytes) -> bytes:
     if os.environ.get("CLONE_REWRITE_ROW_FORMAT", "1") != "1":
         return chunk
@@ -57,36 +36,81 @@ def _rewrite_row_format(chunk: bytes) -> bytes:
         .replace(b"row_format=REDUNDANT", b"row_format=DYNAMIC")
     )
 
-assert proc.stdin is not None
-preamble = os.environ.get("CLONE_IMPORT_PREAMBLE", "")
-if preamble:
-    proc.stdin.write(preamble.encode("utf-8"))
-saved = []
+def _safe_write(stream, data: bytes) -> bool:
+    if not data:
+        return True
+    try:
+        stream.write(data)
+        return True
+    except BrokenPipeError:
+        return False
+
 try:
+    header_path = os.environ["CLONE_HEADER"]
+    cnf = os.environ["CLONE_MYSQL_CNF"]
+    docker_inner = os.environ.get("CLONE_DOCKER_IMPORT_INNER", "").strip()
+    sudo_b64 = os.environ.get("CLONE_SUDO_PW_B64", "").strip()
+    if docker_inner:
+        if sudo_b64:
+            proc = subprocess.Popen(
+                ["sudo", "-S", "-p", "", "sh", "-c", docker_inner],
+                stdin=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            assert proc.stdin is not None
+            if not _safe_write(proc.stdin, base64.b64decode(sudo_b64) + b"\n"):
+                _fail("import died before sudo/docker (check password and container)")
+        else:
+            proc = subprocess.Popen(
+                ["sh", "-c", docker_inner],
+                stdin=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+    else:
+        mysql_bin = os.environ.get("CLONE_MYSQL_BIN", "mysql")
+        proc = subprocess.Popen(
+            [mysql_bin, "--defaults-extra-file=" + cnf],
+            stdin=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    assert proc.stdin is not None
+    preamble = os.environ.get("CLONE_IMPORT_PREAMBLE", "")
+    if preamble and not _safe_write(proc.stdin, preamble.encode("utf-8")):
+        err = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
+        _fail(err.strip() or "import died on session preamble (SQL error?)")
+    saved = []
+    pipe_broke = False
     while len(saved) < 150:
         line = sys.stdin.buffer.readline()
         if not line:
             break
         line = _rewrite_row_format(line)
         saved.append(line)
-        proc.stdin.write(line)
-    open(header_path, "wb").writelines(saved)
-    while True:
-        chunk = sys.stdin.buffer.read(1024 * 1024)
-        if not chunk:
+        if not _safe_write(proc.stdin, line):
+            pipe_broke = True
             break
-        proc.stdin.write(_rewrite_row_format(chunk))
-except BrokenPipeError:
-    pass
-finally:
+    open(header_path, "wb").writelines(saved)
+    if not pipe_broke:
+        while True:
+            chunk = sys.stdin.buffer.read(1024 * 1024)
+            if not chunk:
+                break
+            if not _safe_write(proc.stdin, _rewrite_row_format(chunk)):
+                pipe_broke = True
+                break
     proc.stdin.close()
-err = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
-rc = proc.wait()
-if rc != 0:
-    msg = (err.strip() or f"import exit {rc}")[:2000]
-    sys.stderr.write(msg + "\n")
-    raise SystemExit(rc)
-raise SystemExit(0)
+    err = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
+    rc = proc.wait()
+    if rc != 0 or pipe_broke:
+        msg = err.strip() or (f"import exit {rc}" if rc else "import pipe closed early (SQL error?)")
+        _fail(msg, rc if rc else 1)
+    raise SystemExit(0)
+except BrokenPipeError:
+    _fail("import pipe broken — lihat stderr MariaDB di atas atau log dump")
+except SystemExit:
+    raise
+except Exception as exc:
+    _fail(f"stream filter: {exc}")
 """
 
 
@@ -594,7 +618,11 @@ def _dump_restore(job_id: int, source: Node, target: Node, databases: list[str])
             target,
             f"exec {c} mariadb-dump --defaults-extra-file={shlex.quote(src_cnf)} {dump_flags}{db_args}",
         )
-        import_inner = f"docker exec -i {container} mariadb --defaults-extra-file={shlex.quote(dst_cnf_container)}"
+        import_shell_inner = (
+            f"mariadb --defaults-extra-file={dst_cnf_container} "
+            f"|| mysql --defaults-extra-file={dst_cnf_container}"
+        )
+        import_inner = f"docker exec -i {container} sh -c {shlex.quote(import_shell_inner)}"
         sudo_b64 = _sudo_password_b64(target) if target.docker_sudo else ""
         rm_cnf = _docker_cmd(
             target,
@@ -614,13 +642,17 @@ def _dump_restore(job_id: int, source: Node, target: Node, databases: list[str])
         )
         if sudo_b64:
             env_exports += f" CLONE_SUDO_PW_B64={shlex.quote(sudo_b64)}"
+        dump_err = "/tmp/clone-monitor-dump.err"
         remote = (
             "set -o pipefail; "
             f"{inspect} | grep -qx true || "
             f'{{ echo "Container {container} tidak jalan" >&2; exit 1; }}; '
             f"export {env_exports}; "
-            f"{dump} | {py_pipe}; "
-            f"ec=$?; {rm_cnf}; exit $ec"
+            f"{{ {dump} 2>{shlex.quote(dump_err)} | {py_pipe}; }}; "
+            f"ec=$?; "
+            f'if [ "$ec" -ne 0 ] && [ -s {shlex.quote(dump_err)} ]; then '
+            f'echo "--- mariadb-dump ---" >&2; cat {shlex.quote(dump_err)} >&2; fi; '
+            f"{rm_cnf}; rm -f {shlex.quote(dump_err)}; exit $ec"
         )
     else:
         _write_remote_cnf(
@@ -659,7 +691,7 @@ def _dump_restore(job_id: int, source: Node, target: Node, databases: list[str])
     try:
         code, out, err = ssh_run(target, remote, timeout=60 * 60 * 12)
         if code != 0:
-            raise CloneError((err or out or f"dump exit {code}")[:1000])
+            raise CloneError((err or out or f"dump exit {code}")[:4000])
         store.append_job_log(job_id, "Dump/restore stream finished")
         _store_header(job_id, target, header)
     finally:
