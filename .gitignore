@@ -2,6 +2,7 @@ gdrive-sa.json
 grive-sa.json
 .env
 config.yaml
+monitor-config/config.yaml
 state/
 .venv/
 tmp/

@@ -87,6 +87,7 @@ Lihat [CLONE.md](CLONE.md). Di server (pertama kali):
 ```bash
 cp .env.example .env          # isi GDRIVE_*, CLONE_* (lihat CLONE.md)
 cp config.example.yaml config.yaml   # edit topology + connections
+./scripts/setup-monitor-config.sh    # salin ke monitor-config/ (fallback mount)
 docker compose up -d --build
 # buka http://<server>:8095
 ```
