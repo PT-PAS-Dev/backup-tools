@@ -80,7 +80,7 @@ User harus bisa login dari IP Docker/Mac ke server. Privilege: `SELECT`, `SHOW V
 
 ## Dashboard Clone DB
 
-Web **pemantauan clone & replikasi** (bukan cutover) di port **8095** (host): topology `.94 → .96 → .98`, koneksi MySQL, lag, verifikasi, riwayat, peringatan, dan start clone per database.
+Web **pemantauan clone & replikasi** (bukan cutover) di port **8095** (host): topology `.94 → .13.27 → .98`, koneksi MySQL, lag, verifikasi, riwayat, peringatan, dan start clone per database.
 
 Lihat [CLONE.md](CLONE.md). Di server (pertama kali):
 

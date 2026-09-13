@@ -28,8 +28,8 @@ topology:
     user: backup
     label: PRODUCTION MASTER
   clones:
-    - name: clone-96
-      host: 172.21.5.96
+    - name: clone-13-27
+      host: 172.21.13.27
       port: 3306
       role: clone
       os: linux
@@ -44,7 +44,7 @@ topology:
       port: 3306
       role: clone
       os: linux
-      replicate_from: clone-96
+      replicate_from: clone-13-27
       user: monitor
       ssh_user: ubuntu
       ssh_port: 22

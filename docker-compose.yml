@@ -34,7 +34,12 @@ services:
     ports:
       - "${MONITOR_HOST_PORT:-8095}:8090"
     volumes:
-      - ./config.yaml:/app/monitor-config.yaml:ro
+      - type: bind
+        source: ./config.yaml
+        target: /app/monitor-config.yaml
+        read_only: true
+        bind:
+          create_host_path: false
       - monitor-data:/app/monitor-data
     extra_hosts:
       - "host.docker.internal:host-gateway"

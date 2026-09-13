@@ -304,7 +304,7 @@ def precheck(
         add(
             "Chain-ready (log_bin + log_slave_updates)",
             chain_ok,
-            f"log_bin={log_bin or '?'} log_slave_updates={log_slave or '?'} — diperlukan nanti untuk replikasi ke downstream (.98), bukan untuk clone awal ke .96.",
+            f"log_bin={log_bin or '?'} log_slave_updates={log_slave or '?'} — diperlukan nanti untuk replikasi ke downstream (.98), bukan untuk clone awal ke clone pertama di chain.",
         )
 
     repl_user, repl_password = replication_credentials()
@@ -557,7 +557,7 @@ def _dump_restore(job_id: int, source: Node, target: Node, databases: list[str])
             f'{{ echo "Container {container} tidak jalan" >&2; exit 1; }}; '
             'MYSQL_BIN="$(command -v mariadb 2>/dev/null || command -v mysql 2>/dev/null || true)"; '
             'if [ -z "$MYSQL_BIN" ]; then '
-            'echo "Butuh mysql/mariadb client di host .96 untuk import ke port Docker (127.0.0.1)" >&2; exit 127; fi; '
+            'echo "Butuh mysql/mariadb client di host clone untuk import ke port Docker (127.0.0.1)" >&2; exit 127; fi; '
             f"export CLONE_HEADER={shlex.quote(header)} CLONE_MYSQL_CNF={shlex.quote(dst_cnf)} CLONE_MYSQL_BIN=\"$MYSQL_BIN\"; "
             f"{dump} | {py_pipe}; "
             f"ec=$?; {rm_src}; rm -f {shlex.quote(dst_cnf)}; exit $ec"

@@ -7,14 +7,15 @@ case "$CFG" in
   *) CFG="/app/$CFG" ;;
 esac
 
-if [ ! -e "$CFG" ]; then
-  echo "monitor: missing $CFG — copy config.example.yaml to config.yaml on the host" >&2
+if [ -d "$CFG" ]; then
+  echo "monitor: $CFG is a directory inside the container." >&2
+  echo "monitor: on the host: docker compose stop monitor && rm -rf config.yaml && cp config.example.yaml config.yaml && nano config.yaml" >&2
   exit 1
 fi
 
-if [ -d "$CFG" ]; then
-  echo "monitor: $CFG is a directory (Docker created it because the file was missing)." >&2
-  echo "monitor: on the host run: rm -rf config.yaml && cp config.example.yaml config.yaml" >&2
+if [ ! -f "$CFG" ]; then
+  echo "monitor: missing config file at $CFG (CONFIG_PATH=${CONFIG_PATH:-})" >&2
+  echo "monitor: on the host: test -f config.yaml || cp config.example.yaml config.yaml" >&2
   exit 1
 fi
 
