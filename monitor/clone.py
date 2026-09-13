@@ -19,32 +19,59 @@ log = logging.getLogger("clone-monitor")
 _job_lock = threading.Lock()
 
 STREAM_FILTER = r"""
-import os, sys, subprocess, shlex
+import os, sys, subprocess, base64
 header_path = os.environ["CLONE_HEADER"]
 cnf = os.environ["CLONE_MYSQL_CNF"]
-shell_import = os.environ.get("CLONE_MYSQL_SHELL", "").strip()
-if shell_import:
-    proc = subprocess.Popen(shell_import, shell=True, stdin=subprocess.PIPE)
+docker_inner = os.environ.get("CLONE_DOCKER_IMPORT_INNER", "").strip()
+sudo_b64 = os.environ.get("CLONE_SUDO_PW_B64", "").strip()
+if docker_inner:
+    if sudo_b64:
+        proc = subprocess.Popen(
+            ["sudo", "-S", "-p", "", "sh", "-c", docker_inner],
+            stdin=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        assert proc.stdin is not None
+        proc.stdin.write(base64.b64decode(sudo_b64) + b"\n")
+    else:
+        proc = subprocess.Popen(
+            ["sh", "-c", docker_inner],
+            stdin=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
 else:
     mysql_bin = os.environ.get("CLONE_MYSQL_BIN", "mysql")
-    cmd = [mysql_bin, "--defaults-extra-file=" + cnf]
-    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    proc = subprocess.Popen(
+        [mysql_bin, "--defaults-extra-file=" + cnf],
+        stdin=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
 assert proc.stdin is not None
 saved = []
-while len(saved) < 150:
-    line = sys.stdin.buffer.readline()
-    if not line:
-        break
-    saved.append(line)
-    proc.stdin.write(line)
-open(header_path, "wb").writelines(saved)
-while True:
-    chunk = sys.stdin.buffer.read(1024 * 1024)
-    if not chunk:
-        break
-    proc.stdin.write(chunk)
-proc.stdin.close()
-raise SystemExit(proc.wait())
+try:
+    while len(saved) < 150:
+        line = sys.stdin.buffer.readline()
+        if not line:
+            break
+        saved.append(line)
+        proc.stdin.write(line)
+    open(header_path, "wb").writelines(saved)
+    while True:
+        chunk = sys.stdin.buffer.read(1024 * 1024)
+        if not chunk:
+            break
+        proc.stdin.write(chunk)
+except BrokenPipeError:
+    pass
+finally:
+    proc.stdin.close()
+err = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
+rc = proc.wait()
+if rc != 0:
+    msg = (err.strip() or f"import exit {rc}")[:2000]
+    sys.stderr.write(msg + "\n")
+    raise SystemExit(rc)
+raise SystemExit(0)
 """
 
 
@@ -552,20 +579,24 @@ def _dump_restore(job_id: int, source: Node, target: Node, databases: list[str])
             target,
             f"exec {c} mariadb-dump --defaults-extra-file={shlex.quote(src_cnf)} {dump_flags}{db_args}",
         )
-        import_shell = _docker_cmd(
-            target,
-            f"exec -i {c} mariadb --defaults-extra-file={shlex.quote(dst_cnf_container)}",
-        )
+        import_inner = f"docker exec -i {container} mariadb --defaults-extra-file={shlex.quote(dst_cnf_container)}"
+        sudo_b64 = _sudo_password_b64(target) if target.docker_sudo else ""
         rm_cnf = _docker_cmd(
             target,
             f"exec {c} rm -f {shlex.quote(src_cnf)} {shlex.quote(dst_cnf_container)}",
         )
+        env_exports = (
+            f"CLONE_HEADER={shlex.quote(header)} "
+            f"CLONE_MYSQL_CNF={shlex.quote(dst_cnf_container)} "
+            f"CLONE_DOCKER_IMPORT_INNER={shlex.quote(import_inner)}"
+        )
+        if sudo_b64:
+            env_exports += f" CLONE_SUDO_PW_B64={shlex.quote(sudo_b64)}"
         remote = (
             "set -o pipefail; "
             f"{inspect} | grep -qx true || "
             f'{{ echo "Container {container} tidak jalan" >&2; exit 1; }}; '
-            f"export CLONE_HEADER={shlex.quote(header)} CLONE_MYSQL_CNF={shlex.quote(dst_cnf_container)} "
-            f"CLONE_MYSQL_SHELL={shlex.quote(import_shell)}; "
+            f"export {env_exports}; "
             f"{dump} | {py_pipe}; "
             f"ec=$?; {rm_cnf}; exit $ec"
         )
