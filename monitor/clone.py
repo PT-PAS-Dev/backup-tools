@@ -46,13 +46,28 @@ else:
         stdin=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
+def _rewrite_row_format(chunk: bytes) -> bytes:
+    if os.environ.get("CLONE_REWRITE_ROW_FORMAT", "1") != "1":
+        return chunk
+    return (
+        chunk.replace(b"ROW_FORMAT=COMPACT", b"ROW_FORMAT=DYNAMIC")
+        .replace(b"ROW_FORMAT=REDUNDANT", b"ROW_FORMAT=DYNAMIC")
+        .replace(b"ROW_FORMAT=FIXED", b"ROW_FORMAT=DYNAMIC")
+        .replace(b"row_format=COMPACT", b"row_format=DYNAMIC")
+        .replace(b"row_format=REDUNDANT", b"row_format=DYNAMIC")
+    )
+
 assert proc.stdin is not None
+preamble = os.environ.get("CLONE_IMPORT_PREAMBLE", "")
+if preamble:
+    proc.stdin.write(preamble.encode("utf-8"))
 saved = []
 try:
     while len(saved) < 150:
         line = sys.stdin.buffer.readline()
         if not line:
             break
+        line = _rewrite_row_format(line)
         saved.append(line)
         proc.stdin.write(line)
     open(header_path, "wb").writelines(saved)
@@ -60,7 +75,7 @@ try:
         chunk = sys.stdin.buffer.read(1024 * 1024)
         if not chunk:
             break
-        proc.stdin.write(chunk)
+        proc.stdin.write(_rewrite_row_format(chunk))
 except BrokenPipeError:
     pass
 finally:
@@ -585,10 +600,17 @@ def _dump_restore(job_id: int, source: Node, target: Node, databases: list[str])
             target,
             f"exec {c} rm -f {shlex.quote(src_cnf)} {shlex.quote(dst_cnf_container)}",
         )
+        import_preamble = (
+            "SET SESSION innodb_strict_mode=0;\n"
+            "SET NAMES utf8mb4;\n"
+            "SET SESSION innodb_default_row_format='DYNAMIC';\n"
+        )
         env_exports = (
             f"CLONE_HEADER={shlex.quote(header)} "
             f"CLONE_MYSQL_CNF={shlex.quote(dst_cnf_container)} "
-            f"CLONE_DOCKER_IMPORT_INNER={shlex.quote(import_inner)}"
+            f"CLONE_DOCKER_IMPORT_INNER={shlex.quote(import_inner)} "
+            f"CLONE_IMPORT_PREAMBLE={shlex.quote(import_preamble)} "
+            f"CLONE_REWRITE_ROW_FORMAT=1"
         )
         if sudo_b64:
             env_exports += f" CLONE_SUDO_PW_B64={shlex.quote(sudo_b64)}"
@@ -613,13 +635,19 @@ def _dump_restore(job_id: int, source: Node, target: Node, databases: list[str])
             dst_cnf,
         )
         store.append_job_log(job_id, f"Restore target MySQL: {local_mysql_host}:{target.port} (TCP, bukan socket)")
+        import_preamble = (
+            "SET SESSION innodb_strict_mode=0;\n"
+            "SET NAMES utf8mb4;\n"
+            "SET SESSION innodb_default_row_format='DYNAMIC';\n"
+        )
         remote = (
             "set -o pipefail; "
             'DUMP_BIN="$(command -v mariadb-dump 2>/dev/null || command -v mysqldump 2>/dev/null || true)"; '
             'MYSQL_BIN="$(command -v mariadb 2>/dev/null || command -v mysql 2>/dev/null || true)"; '
             'if [ -z "$DUMP_BIN" ] || [ -z "$MYSQL_BIN" ]; then '
             'echo "Pasang mariadb-client di host clone, atau set docker_container di config.yaml" >&2; exit 127; fi; '
-            f'export CLONE_HEADER={shlex.quote(header)} CLONE_MYSQL_CNF={shlex.quote(dst_cnf)} CLONE_MYSQL_BIN="$MYSQL_BIN"; '
+            f"export CLONE_HEADER={shlex.quote(header)} CLONE_MYSQL_CNF={shlex.quote(dst_cnf)} "
+            f"CLONE_MYSQL_BIN=\"$MYSQL_BIN\" CLONE_IMPORT_PREAMBLE={shlex.quote(import_preamble)} CLONE_REWRITE_ROW_FORMAT=1; "
             f'"$DUMP_BIN" --defaults-extra-file={shlex.quote(src_cnf)} {dump_flags}{db_args} '
             f"| {py_pipe}; "
             f"ec=$?; rm -f {shlex.quote(src_cnf)} {shlex.quote(dst_cnf)}; exit $ec"
