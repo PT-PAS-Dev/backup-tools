@@ -28,8 +28,8 @@ topology:
     user: backup
     label: PRODUCTION MASTER
   clones:
-    - name: clone-13-27
-      host: 172.21.13.27
+    - name: clone-13-30
+      host: 172.21.13.30
       port: 3306
       role: clone
       os: linux
@@ -39,12 +39,12 @@ topology:
       ssh_port: 22
       docker_container: mariadb-server
       label: DATABASE CLONE
-    - name: clone-98
-      host: 172.21.5.98
+    - name: clone-13-31
+      host: 172.21.13.31
       port: 3306
       role: clone
       os: linux
-      replicate_from: clone-13-27
+      replicate_from: clone-13-30
       user: monitor
       ssh_user: ubuntu
       ssh_port: 22

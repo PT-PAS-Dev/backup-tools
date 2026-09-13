@@ -304,7 +304,7 @@ def precheck(
         add(
             "Chain-ready (log_bin + log_slave_updates)",
             chain_ok,
-            f"log_bin={log_bin or '?'} log_slave_updates={log_slave or '?'} — diperlukan nanti untuk replikasi ke downstream (.98), bukan untuk clone awal ke clone pertama di chain.",
+            f"log_bin={log_bin or '?'} log_slave_updates={log_slave or '?'} — diperlukan nanti untuk replikasi ke downstream (mis. .31), bukan untuk clone awal ke clone pertama di chain (mis. .30).",
         )
 
     repl_user, repl_password = replication_credentials()

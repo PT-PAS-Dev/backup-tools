@@ -9,7 +9,7 @@ URL: `http://localhost:8095` · service Docker: `docker compose up monitor` (ter
 | Istilah | Maksud |
 |---------|--------|
 | **Dashboard Clone DB** | Halaman web port 8095 di host (8090 di dalam container) |
-| **Password MySQL clone-13-27** | `CLONE_MYSQL_PASSWORD_CLONE_13_27` — login ke MariaDB di `172.21.13.27` |
+| **Password MySQL clone** | `CLONE_MYSQL_PASSWORD_CLONE_13_30` / `…_13_31` — sesuai nama node di `config.yaml` |
 | **User replikasi** | `CLONE_REPL_*` — akun di **master** `.94` untuk slave connect |
 
 Nama env lama `MONITOR_*` masih didukung.
@@ -20,10 +20,10 @@ Topology:
 .95 Laravel  →  .94 PRODUCTION MASTER (read/write, stays up)
                      |
                      v
-                .13.27 DATABASE CLONE
+                .13.30 DATABASE CLONE
                      |
                      v
-                .98 DATABASE CLONE
+                .13.31 DATABASE CLONE
 ```
 
 Backup-to-Drive (`backup.py`) is unchanged. This service only **reads** `.94` and may **write on clone hosts** after confirmation.
@@ -43,7 +43,7 @@ Does not:
 - Stop, restart, or `RESET MASTER` on `.94`
 - Turn `.94` into a replica
 - Change Laravel database settings
-- Promote clone `.27` / cut over production
+- Promote clone / cut over production
 - Delete binlogs
 - `DROP DATABASE` on the source
 - Invent progress percentages when size comparison is not reliable
@@ -52,7 +52,7 @@ Does not:
 
 1. MariaDB **10.4.32** on all three database hosts. Queries use 10.4 names (`SHOW SLAVE STATUS`, `START SLAVE`, `CHANGE MASTER TO`), not MySQL 8 `REPLICA` syntax.
 2. `.94` remains the only production writer. GTID/binlog/`server_id` are **read live**, never hard-coded.
-3. Chain `.13.27 → .98` needs `log_bin=ON` and `log_slave_updates=ON` **on `172.21.13.27`**. If those are off, the UI blocks cloning to `.98` and does **not** restart `.94`. Apply `my.cnf` on clone host yourself.
+3. Chain `.13.30 → .13.31` needs `log_bin=ON` and `log_slave_updates=ON` **on `172.21.13.30`**. If those are off, the UI blocks cloning to `.31` and does **not** restart `.94`. Apply `my.cnf` on clone host yourself.
 4. OS metrics (CPU/RAM/disk) on Ubuntu require SSH. Windows `.94` shows `UNAVAILABLE` for host metrics; MariaDB metrics still work.
 5. Initial clone runs over **SSH on the clone host** so ~45 GB does not pass through the Mac. If MariaDB is **only in Docker**, set **`docker_container`** on that clone in `config.yaml` (output of `docker ps --format '{{.Names}}'`). Dump/restore uses `docker exec … mariadb-dump` / `mariadb` inside the container. If SSH user is not in the `docker` group, set **`docker_sudo: true`**. The clone job runs `sudo -S docker …` using **`MONITOR_SSH_PASSWORD`** (same as SSH login) unless you set **`CLONE_SSH_SUDO_PASSWORD_<NODE>`**. Alternatively use passwordless sudo for docker or add the user to the `docker` group. Dump runs in the container; import uses **`127.0.0.1:3306`** on the host (published Docker port). Without `docker_container`, the host needs `mariadb-client` and import via `local_mysql_host` (default `127.0.0.1:3306`).
 6. The replication account on the upstream is created **manually**. This app does not `CREATE USER` on production.
@@ -74,8 +74,8 @@ Replication user (on **upstream**, created by you):
 
 ```sql
 GRANT REPLICATION SLAVE, REPLICATION CLIENT
-ON *.* TO 'repl'@'172.21.13.27' IDENTIFIED BY '...';
--- and from .98 to .13.27 when chaining
+ON *.* TO 'repl'@'172.21.13.30' IDENTIFIED BY '...';
+-- and from .31 to .30 when chaining
 FLUSH PRIVILEGES;
 ```
 
@@ -90,8 +90,8 @@ Add a `topology` block to `config.yaml` (see `config.example.yaml`). Source can 
 ```text
 CLONE_REPL_USER=repl
 CLONE_REPL_PASSWORD=...
-CLONE_MYSQL_PASSWORD_CLONE_13_27=...   # password MySQL di 172.21.13.27
-CLONE_MYSQL_PASSWORD_CLONE_98=...
+CLONE_MYSQL_PASSWORD_CLONE_13_30=...   # 172.21.13.30
+CLONE_MYSQL_PASSWORD_CLONE_13_31=...   # 172.21.13.31
 CLONE_SSH_PASSWORD=...              # password SSH user development di clone
 ```
 
