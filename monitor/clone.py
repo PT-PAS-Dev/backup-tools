@@ -633,9 +633,8 @@ def _dump_restore(job_id: int, source: Node, target: Node, databases: list[str])
         import_err = "/tmp/clone-monitor-import.err"
         build_combined = (
             f"{{ "
-            f"echo 'SET SESSION innodb_strict_mode=0;' > {shlex.quote(combined_sql)}; "
-            f"echo 'SET NAMES utf8mb4;' >> {shlex.quote(combined_sql)}; "
-            f"echo \"SET SESSION innodb_default_row_format='DYNAMIC';\" >> {shlex.quote(combined_sql)}; "
+            f"printf '%s\\n' 'SET SESSION innodb_strict_mode=0;' 'SET NAMES utf8mb4;' "
+            f"> {shlex.quote(combined_sql)}; "
             f"cat {shlex.quote(dump_sql)} >> {shlex.quote(combined_sql)}; "
             f"}}"
         )
@@ -694,7 +693,6 @@ def _dump_restore(job_id: int, source: Node, target: Node, databases: list[str])
         import_preamble = (
             "SET SESSION innodb_strict_mode=0;\n"
             "SET NAMES utf8mb4;\n"
-            "SET SESSION innodb_default_row_format='DYNAMIC';\n"
         )
         remote = (
             "set -o pipefail; "

@@ -123,7 +123,7 @@ Start clone is disabled until:
 
 Progress: while restore runs, the monitor compares clone `information_schema` size vs source size. If that ratio is not trustworthy, the UI shows `INITIAL CLONE RUNNING` without a fake percent.
 
-**Import error `Row size too large (1118)`:** Clone job sets `innodb_default_row_format=DYNAMIC` and rewrites `ROW_FORMAT=COMPACT` in the dump stream. If it still fails, set on the **clone** MariaDB (`mysql-master` / `my.cnf`): `innodb_default_row_format=DYNAMIC`, restart container, drop partial DB, clone again. Rare wide rows may need schema changes on production (TEXT/BLOB) — that is outside this tool.
+**Import error `Row size too large (1118)`:** Clone job rewrites `ROW_FORMAT=COMPACT|REDUNDANT|FIXED` → `DYNAMIC` in the dump (MariaDB does not allow `SET SESSION innodb_default_row_format`). If it still fails, set on the **clone** MariaDB (`mysql-master` / `my.cnf`): `innodb_default_row_format=DYNAMIC`, restart container, drop partial DB, clone again. Rare wide rows may need schema changes on production (TEXT/BLOB) — that is outside this tool.
 
 ## Alerts
 
