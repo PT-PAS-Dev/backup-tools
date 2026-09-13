@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Peringatan · Dashboard Clone DB{% endblock %}
+{% block heading %}Peringatan{% endblock %}
+{% block lede %}Notifikasi masalah dengan jeda (cooldown), tidak spam setiap poll.{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Time</th><th>Type</th><th>Server</th><th>Severity</th><th>Message</th></tr></thead>
+      <tbody id="alert-body">
+      {% for alert in alerts %}
+        <tr class="tone-{{ alert.severity }}">
+          <td>{{ alert.ts }}</td>
+          <td>{{ alert.type }}</td>
+          <td>{{ alert.server }}</td>
+          <td>{{ alert.severity }}</td>
+          <td>{{ alert.message }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

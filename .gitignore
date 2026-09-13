@@ -6,6 +6,7 @@ state/
 .venv/
 tmp/
 logs/
+monitor-data/
 __pycache__/
 *.pyc
 .DS_Store

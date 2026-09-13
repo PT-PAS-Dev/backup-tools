@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Progress clone · Dashboard Clone DB{% endblock %}
+{% block heading %}Progress clone{% endblock %}
+{% block lede %}Dua mode: jalankan initial clone, atau pantau sinkronisasi .96 / .98 vs master .94.{% endblock %}
+{% block content %}
+<nav class="page-tabs" id="progress-tabs" aria-label="Bagian progress clone">
+  <button type="button" class="page-tab on" data-tab="progress" role="tab" aria-selected="true">Progress sinkron</button>
+  <button type="button" class="page-tab" data-tab="clone" role="tab" aria-selected="false">Initial clone</button>
+</nav>
+
+<div id="tab-progress" class="page-tab-panel" role="tabpanel" data-tab-panel="progress">
+  <section class="panel sync-section">
+    <div class="sync-section-head">
+      <div>
+        <h2>Sinkronisasi vs master (.94)</h2>
+        <p class="hint">Database, tabel, dan <strong>perkiraan baris</strong> (InnoDB). UI refresh ~30 detik · inventory penuh ~6 menit (hemat beban .94).</p>
+      </div>
+      <div class="sync-filters" id="sync-table-filter-global">
+        <span class="hint">Filter tabel:</span>
+        <button type="button" class="ghost sm on" data-sync-filter="all">Semua</button>
+        <button type="button" class="ghost sm" data-sync-filter="synced">Sinkron</button>
+        <button type="button" class="ghost sm" data-sync-filter="partial">Sebagian</button>
+        <button type="button" class="ghost sm" data-sync-filter="missing">Belum ada</button>
+        <button type="button" class="ghost sm" data-sync-filter="rows-diff">Baris beda</button>
+      </div>
+    </div>
+    <div id="sync-clones-root" class="sync-clones-grid">
+      <p class="hint">Memuat data sinkronisasi…</p>
+    </div>
+  </section>
+</div>
+
+<div id="tab-clone" class="page-tab-panel hidden" role="tabpanel" data-tab-panel="clone" hidden>
+  <section class="grid-2">
+    <article class="panel">
+      <h2>Job clone saat ini</h2>
+      <div id="job-card">
+        {% set job = progress.latest %}
+        {% if job %}
+          <p class="kicker">{{ job.source }} → {{ job.target }}</p>
+          <p class="status-lg">{{ job.status }} · {{ job.phase or "" }}</p>
+          {% if job.progress_reliable and job.percent is not none %}
+            <div class="bar lg"><span style="width: {{ job.percent }}%"></span></div>
+            <p>{{ job.percent }}% ukuran ter-copy · {{ job.copied_human }} / {{ job.total_human }} · sisa {{ job.remaining_human }}</p>
+          {% elif job.status == "RUNNING" %}
+            <div class="bar lg indeterminate"><span></span></div>
+            <p class="hint">{{ job.phase_label or "Clone berjalan" }} — buka tab <strong>Progress sinkron</strong> untuk meter ukuran/baris.</p>
+          {% else %}
+            <p class="hint">{{ job.message }}</p>
+          {% endif %}
+          <pre class="log">{{ job.log or "Belum ada log." }}</pre>
+        {% else %}
+          <p class="hint">Tidak ada job clone aktif. Isi form di kanan lalu Start clone.</p>
+        {% endif %}
+      </div>
+    </article>
+    <article class="panel">
+      <h2>Mulai initial clone</h2>
+      <p class="hint">SSH ke clone · <code>docker_container</code> jika MariaDB di Docker · replikasi .94 opsional (<code>CLONE_REPL_*</code>).</p>
+      <form id="clone-form" class="form">
+        <label>Target clone
+          <select name="target" id="clone-target">
+            {% for clone in progress.clones %}
+            <option value="{{ clone.name }}" {% if clone.name == catalog_target %}selected{% endif %}>{{ clone.name }} ← {{ clone['from'] }} ({{ clone.host }})</option>
+            {% endfor %}
+          </select>
+        </label>
+        <div class="db-picker">
+          <div class="db-picker-head">
+            <span>Database dari source (.94)</span>
+            <div class="db-picker-actions">
+              <button type="button" class="ghost sm" id="db-select-all">Pilih semua</button>
+              <button type="button" class="ghost sm" id="db-select-none">Kosongkan</button>
+              <button type="button" class="ghost sm" id="db-select-unsynced">Pilih belum sync</button>
+              <button type="button" class="ghost sm" id="db-reload">Muat ulang</button>
+            </div>
+          </div>
+          <p class="hint" id="db-picker-summary">
+            {% if catalog.error %}
+            Gagal baca daftar: {{ catalog.error }}
+            {% elif catalog.databases %}
+            Source {{ catalog.source_host }} · {{ catalog.total_size_human }} · centang DB yang mau di-clone
+            {% else %}
+            Klik Muat ulang jika kosong.
+            {% endif %}
+          </p>
+          <div id="db-list" class="db-list">
+            {% if catalog.error %}
+            <p class="hint tone-crit" style="padding:8px">{{ catalog.error }}</p>
+            {% elif catalog.databases %}
+            <table class="db-table">
+              <thead>
+                <tr>
+                  <th class="col-check"></th>
+                  <th class="col-name">Database</th>
+                  <th class="col-status">Di clone</th>
+                  <th class="col-size">Ukuran</th>
+                  <th class="col-tables">Tabel</th>
+                </tr>
+              </thead>
+              <tbody>
+              {% for db in catalog.databases %}
+                <tr class="{% if db.synced %}db-synced{% endif %}">
+                  <td class="col-check"><input type="checkbox" name="db" value="{{ db.name }}" data-size="{{ db.size_bytes }}" data-synced="{{ '1' if db.synced else '0' }}" {% if not db.synced %}checked{% endif %} aria-label="{{ db.name }}"></td>
+                  <td class="col-name"><span class="mono" title="{{ db.name }}">{{ db.name }}</span></td>
+                  <td class="col-status"><span class="sync-tag {{ db.sync_status }}">{{ db.sync_label }}</span></td>
+                  <td class="col-size">{{ db.size_bytes | filesize }}</td>
+                  <td class="col-tables">{{ db.table_count }}</td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+            {% else %}
+            <p class="hint" style="padding:8px">Daftar kosong.</p>
+            {% endif %}
+          </div>
+        </div>
+        <label>Ketik hostname clone untuk konfirmasi
+          <input name="confirm" placeholder="172.21.5.96" autocomplete="off">
+        </label>
+        <label class="check">
+          <input type="checkbox" name="replace">
+          Ganti database yang sudah ada di clone (bukan di .94)
+        </label>
+        <div class="actions">
+          <button type="button" id="precheck-btn" class="ghost">Pre-check</button>
+          <button type="submit" class="danger">Start clone</button>
+        </div>
+      </form>
+      <pre id="precheck-out" class="log"></pre>
+    </article>
+  </section>
+
+  <section class="panel">
+    <h2>Riwayat job</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Waktu</th><th>Jalur</th><th>Status</th><th>Fase</th><th>Pesan</th></tr></thead>
+        <tbody id="job-history-body">
+        {% for job in progress.jobs %}
+          <tr>
+            <td>{{ job.ts }}</td>
+            <td>{{ job.source }} → {{ job.target }}</td>
+            <td>{{ job.status }}</td>
+            <td>{{ job.phase }}</td>
+            <td>{{ job.message }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

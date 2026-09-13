@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Verifikasi · Dashboard Clone DB{% endblock %}
+{% block heading %}Verifikasi clone{% endblock %}
+{% block lede %}Structure and size compared from the latest poll. Table row counts are approximate InnoDB estimates.{% endblock %}
+{% block content %}
+<div id="verify-pairs" class="stack">
+{% for pair in pairs %}
+  {% set r = pair.result %}
+  <section class="panel">
+    <div class="split-head">
+      <h2>{{ pair.from }} → {{ pair.to }}</h2>
+      <span class="status {{ 'ok' if r.overall == 'MATCH' else 'crit' }}">{{ r.overall }}</span>
+    </div>
+    <div class="compare">
+      <div>
+        <h3>SOURCE {{ pair.from }}</h3>
+        <p class="size">{{ r.source_size | filesize }}</p>
+        <p>{{ r.source_db_count }} databases · {{ r.source_table_count }} tables</p>
+      </div>
+      <div>
+        <h3>CLONE {{ pair.to }}</h3>
+        <p class="size">{{ r.clone_size | filesize }}</p>
+        <p>{{ r.clone_db_count }} databases · {{ r.clone_table_count }} tables</p>
+      </div>
+    </div>
+    <dl class="facts dense">
+      <div><dt>Size</dt><dd>{{ "MATCH" if r.size_match else "DIFFERENCE" }}</dd></div>
+      <div><dt>GTID source</dt><dd class="mono">{{ r.gtid_source or "n/a" }}</dd></div>
+      <div><dt>GTID clone</dt><dd class="mono">{{ r.gtid_clone or "n/a" }}</dd></div>
+      <div><dt>GTID</dt><dd>{{ r.gtid_note }}</dd></div>
+      <div><dt>Replication</dt><dd>{{ "RUNNING" if r.replication_running else "NOT RUNNING" }}</dd></div>
+      <div><dt>Lag</dt><dd>{{ r.replication_lag if r.replication_lag is not none else "n/a" }}</dd></div>
+    </dl>
+    {% if r.missing_databases or r.extra_databases or r.missing_tables or r.engine_diffs %}
+    <div class="banner warn">
+      Missing DBs: {{ r.missing_databases | join(", ") or "none" }} ·
+      Extra DBs: {{ r.extra_databases | join(", ") or "none" }} ·
+      Missing tables: {{ r.missing_tables | length }}{% if r.missing_tables_more %} +{{ r.missing_tables_more }}{% endif %} ·
+      Engine diffs: {{ r.engine_diffs | length }}
+    </div>
+    {% endif %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Database</th>
+            <th>Source size</th>
+            <th>Clone size</th>
+            <th>Tables src/clone</th>
+            <th>Rows src/clone</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for db in r.databases %}
+          <tr>
+            <td class="mono">{{ db.name }}</td>
+            <td>{{ db.source_size | filesize }}</td>
+            <td>{{ db.clone_size | filesize }}</td>
+            <td>{{ db.source_tables }} / {{ db.clone_tables }}</td>
+            <td>{{ db.source_rows }} / {{ db.clone_rows }}</td>
+            <td>{{ "MATCH" if db.match else "DIFFERENCE" }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endfor %}
+</div>
+{% endblock %}

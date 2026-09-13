@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Dashboard Clone DB{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body data-page="{{ nav }}">
+  <div class="shell">
+    <aside class="rail">
+      <div class="brand">
+        <span class="brand-mark">DC</span>
+        <div>
+          <strong>Dashboard Clone DB</strong>
+          <small>MariaDB 10.4 · bukan cutover</small>
+        </div>
+      </div>
+      <nav>
+        <a href="/" class="{{ 'active' if nav == 'dashboard' else '' }}">Beranda</a>
+        <a href="/progress" class="{{ 'active' if nav == 'progress' else '' }}">Progress clone</a>
+        <a href="/replication" class="{{ 'active' if nav == 'replication' else '' }}">Replikasi</a>
+        <a href="/verify" class="{{ 'active' if nav == 'verify' else '' }}">Verifikasi</a>
+        <a href="/history" class="{{ 'active' if nav == 'history' else '' }}">Riwayat</a>
+        <a href="/alerts" class="{{ 'active' if nav == 'alerts' else '' }}">Peringatan</a>
+      </nav>
+      <div class="rail-foot">
+        <p>.94 tetap master produksi</p>
+        <p>Laravel tidak diubah</p>
+      </div>
+    </aside>
+    <main>
+      <header class="top">
+        <div>
+          <h1>{% block heading %}Beranda{% endblock %}</h1>
+          <p class="lede">{% block lede %}Pantau clone dan replikasi. Bukan alat pindah production.{% endblock %}</p>
+        </div>
+        <div class="top-meta">
+          <span class="pill muted">Baca status server langsung</span>
+          <span class="pill info" id="poll-age">refresh ~30 dtk</span>
+        </div>
+      </header>
+      {% if overview and overview.missing %}
+      <div class="banner warn">{{ overview.missing }}</div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

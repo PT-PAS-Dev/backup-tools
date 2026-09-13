@@ -15,3 +15,47 @@ connections:
     databases:
       - name: lab_report
         folder: lab_report_b
+
+# Clone monitor topology. Source stays production master (read/write).
+# Clone passwords: MONITOR_MYSQL_PASSWORD_<NAME> in .env (see CLONE.md).
+topology:
+  source:
+    name: master-94
+    host: 172.21.5.94
+    port: 3306
+    role: source
+    os: windows
+    user: backup
+    label: PRODUCTION MASTER
+  clones:
+    - name: clone-96
+      host: 172.21.5.96
+      port: 3306
+      role: clone
+      os: linux
+      replicate_from: master-94
+      user: monitor
+      ssh_user: ubuntu
+      ssh_port: 22
+      docker_container: mariadb-server
+      label: DATABASE CLONE
+    - name: clone-98
+      host: 172.21.5.98
+      port: 3306
+      role: clone
+      os: linux
+      replicate_from: clone-96
+      user: monitor
+      ssh_user: ubuntu
+      ssh_port: 22
+      label: DATABASE CLONE
+
+monitor:
+  poll_interval_seconds: 30
+  lag_warning_seconds: 60
+  disk_low_percent: 15
+  cpu_high_percent: 90
+  ram_high_percent: 90
+  alert_cooldown_minutes: 30
+  growth_percent_24h: 20
+  binlog_risk_ratio: 0.5

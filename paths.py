@@ -24,6 +24,8 @@ def load_project_env() -> None:
     os.environ.setdefault("STATE_PATH", str(PROJECT_ROOT / "state" / "fingerprints.json"))
     os.environ.setdefault("OAUTH_PORT", "8080")
     os.environ.setdefault("INCREMENTAL", "1")
+    os.environ.setdefault("MONITOR_DATA_DIR", str(PROJECT_ROOT / "monitor-data"))
+    os.environ.setdefault("MONITOR_PORT", "8090")
 
     for key in (
         "CONFIG_PATH",

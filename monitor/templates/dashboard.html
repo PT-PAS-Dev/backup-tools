@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Beranda · Dashboard Clone DB{% endblock %}
+{% block heading %}Topology clone production{% endblock %}
+{% block lede %}Master (.94) tetap read/write. Clone mengikuti lewat replikasi. Bukan cutover.{% endblock %}
+{% block content %}
+<section class="grid-2">
+  <article class="panel">
+    <h2>Topology</h2>
+    <div id="topology" class="topology">
+      {% for node in overview.nodes %}
+      <div class="node tone-{{ node.health.tone }}">
+        <div class="node-head">
+          <span class="dot {{ node.health.tone }}"></span>
+          <div>
+            <strong>{{ node.display_host }} · {{ node.host }}</strong>
+            <small>{{ node.title }} · {{ node.name }}</small>
+          </div>
+          <span class="badges">
+            <span class="status mysql tone-{{ node.mysql.tone }}" title="{{ node.mysql.detail }}">MySQL {{ node.mysql.label }}</span>
+            {% if node.role == "clone" %}
+            <span class="status clone">{{ node.clone_status }}</span>
+            {% endif %}
+          </span>
+        </div>
+        <dl class="facts">
+          <div><dt>MySQL connect</dt><dd class="tone-{{ node.mysql.tone }}">{{ node.mysql.label }}{% if node.mysql.status == "CONNECTED" %} · {{ node.mysql.detail }}{% endif %}</dd></div>
+          <div><dt>MySQL user</dt><dd class="mono">{{ node.mysql_user }}@{{ node.host }}:{{ node.mysql_port }}</dd></div>
+          {% if node.mysql.status == "FAILED" %}
+          <div class="full"><dt>MySQL error</dt><dd class="mono err">{{ node.mysql.detail }}</dd></div>
+          {% endif %}
+          <div><dt>Health</dt><dd>{{ node.health.label }}</dd></div>
+          {% if node.role == "clone" %}
+          <div><dt>Clone / repl</dt><dd>{{ node.clone_status }} · lag {{ node.replication.lag_text }}</dd></div>
+          {% endif %}
+          <div><dt>Size</dt><dd>{{ node.size_human }}</dd></div>
+          <div><dt>Lag</dt><dd>{{ node.replication.lag_text }}</dd></div>
+          <div><dt>GTID</dt><dd class="mono">{{ (node.gtid.current_pos or node.gtid.slave_pos or "n/a") }}</dd></div>
+          <div><dt>Binlog</dt><dd class="mono">{{ node.binlog_file or "n/a" }} {{ node.binlog_pos }}</dd></div>
+          <div><dt>CPU</dt><dd>{{ node.cpu_text }}</dd></div>
+          <div><dt>RAM</dt><dd>{{ node.ram_text }}</dd></div>
+          <div><dt>Disk</dt><dd>{{ node.disk_text }}</dd></div>
+          <div><dt>Uptime</dt><dd>{{ node.uptime_human }}</dd></div>
+          <div><dt>Last error</dt><dd>{{ node.last_error or "none" }}</dd></div>
+          <div><dt>Sampled</dt><dd>{{ node.sampled_at or "—" }}</dd></div>
+        </dl>
+        {% if node.role == "source" %}
+        <p class="rw">READ/WRITE production master</p>
+        {% endif %}
+      </div>
+      {% if not loop.last %}
+      <div class="connector">Replication</div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </article>
+  <article class="panel">
+    <h2>Clone health</h2>
+    <div id="health-cards" class="stack">
+      {% if overview.source %}
+      <div class="health-row tone-{{ overview.source.health.tone }}">
+        <div>
+          <strong>{{ overview.source.display_host }} MASTER</strong>
+          <small>{{ overview.source.host }}</small>
+        </div>
+        <span>{{ overview.source.health.label }}</span>
+      </div>
+      {% endif %}
+      {% for node in overview.clones %}
+      <div class="health-row tone-{{ node.health.tone }}">
+        <div>
+          <strong>{{ node.display_host }} CLONE</strong>
+          <small>MySQL {{ node.mysql.label }} · repl {{ node.clone_status }}</small>
+        </div>
+        <span>{{ node.health.label }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <h2 class="spaced">Database inventory</h2>
+    <p class="hint">Values are read from information_schema on each poll. The 44.7 GB figure is a reference only.</p>
+    <div id="inventory" class="table-wrap">
+      {% set src = overview.source %}
+      {% if src and src.databases %}
+      <table>
+        <thead><tr><th>Database</th><th>Size</th><th>Tables</th><th>Approx rows</th></tr></thead>
+        <tbody>
+        {% for db in src.databases %}
+          <tr>
+            <td class="mono">{{ db.name }}</td>
+            <td>{{ db.size_bytes | filesize }}</td>
+            <td>{{ db.table_count }}</td>
+            <td>{{ db.approx_rows }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr><td>Total</td><td>{{ src.size_human }}</td><td colspan="2">{{ src.databases | length }} databases</td></tr>
+        </tfoot>
+      </table>
+      {% else %}
+      <p class="hint">No inventory yet — waiting for a successful poll of the source.</p>
+      {% endif %}
+    </div>
+  </article>
+</section>
+{% if overview.alerts %}
+<section class="panel">
+  <h2>Recent alerts</h2>
+  <ul class="alert-list">
+    {% for alert in overview.alerts %}
+    <li class="tone-{{ 'crit' if alert.severity == 'crit' else ('warn' if alert.severity == 'warn' else 'info') }}">
+      <strong>{{ alert.type }}</strong>
+      <span>{{ alert.server }} · {{ alert.ts }}</span>
+      <p>{{ alert.message }}</p>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

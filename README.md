@@ -77,3 +77,16 @@ Password yang mengandung `@` harus diapit tanda kutip. Samakan dengan yang dipak
 ## Privilege MySQL
 
 User harus bisa login dari IP Docker/Mac ke server. Privilege: `SELECT`, `SHOW VIEW`, `TRIGGER`, `EVENT`, `LOCK TABLES`.
+
+## Dashboard Clone DB
+
+Web **pemantauan clone & replikasi** (bukan cutover) di port **8090**: topology `.94 → .96 → .98`, koneksi MySQL, lag, verifikasi, riwayat, peringatan, dan start clone per database.
+
+Lihat [CLONE.md](CLONE.md). Setelah menambah blok `topology` di `config.yaml`:
+
+```bash
+docker compose up -d --build
+# buka http://localhost:8090
+```
+
+Dashboard membaca `config.yaml` di host (bind-mount). Backup Drive tetap terpisah; setelah ubah secret backup jalankan `./scripts/load-secrets.sh`.

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Replikasi · Dashboard Clone DB{% endblock %}
+{% block heading %}Status replikasi{% endblock %}
+{% block lede %}Detail IO/SQL thread, lag, GTID, binlog (MariaDB 10.4). Master tidak pernah jadi replica.{% endblock %}
+{% block content %}
+<div id="repl-links" class="stack">
+{% for link in links %}
+  <section class="panel">
+    <h2>{{ link.from }} → {{ link.to }}</h2>
+    <p class="hint">{{ link.from_host }} replicating to {{ link.to_host }}</p>
+    {% set slave = link.slave %}
+    {% if slave and not slave.error %}
+    <dl class="facts dense">
+      <div><dt>IO thread</dt><dd>{{ slave.io_running }}</dd></div>
+      <div><dt>SQL thread</dt><dd>{{ slave.sql_running }}</dd></div>
+      <div><dt>Status</dt><dd>{{ link.replica.replication.label }}</dd></div>
+      <div><dt>Lag</dt><dd>{{ link.replica.replication.lag_text }}</dd></div>
+      <div><dt>Using GTID</dt><dd>{{ slave.using_gtid or "n/a" }}</dd></div>
+      <div><dt>Gtid_IO_Pos</dt><dd class="mono">{{ slave.gtid_io_pos or "n/a" }}</dd></div>
+      <div><dt>Binlog file</dt><dd class="mono">{{ slave.master_log_file or "n/a" }}</dd></div>
+      <div><dt>Read pos</dt><dd class="mono">{{ slave.read_master_log_pos }}</dd></div>
+      <div><dt>Exec file</dt><dd class="mono">{{ slave.relay_master_log_file }}</dd></div>
+      <div><dt>Exec pos</dt><dd class="mono">{{ slave.exec_master_log_pos }}</dd></div>
+      <div><dt>Last error</dt><dd>{{ slave.last_error or slave.last_sql_error or slave.last_io_error or "none" }}</dd></div>
+      <div><dt>Last error time</dt><dd>{{ slave.last_error_time or "n/a" }}</dd></div>
+    </dl>
+    {% else %}
+    <p class="hint">{{ slave.error if slave and slave.error else "Replication is not configured on this clone yet." }}</p>
+    {% endif %}
+    {% if link.risk %}
+    <div class="banner warn">
+      BINLOG RETENTION RISK · source {{ link.risk.source }} retention {{ link.risk.retention_days }} days ·
+      replica lag {{ link.risk.lag_days }} days · risk {{ link.risk.risk }}. Binlogs are not deleted by this tool.
+    </div>
+    {% endif %}
+  </section>
+{% endfor %}
+</div>
+{% endblock %}

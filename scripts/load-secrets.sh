@@ -4,12 +4,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-for file in config.yaml oauth-client.json token.json; do
-  if [[ ! -f "$file" ]]; then
-    echo "Missing $file in $(pwd)" >&2
-    exit 1
-  fi
-done
+if [[ ! -f config.yaml ]]; then
+  echo "Missing config.yaml in $(pwd)" >&2
+  exit 1
+fi
 
 docker compose up --no-start backup >/dev/null 2>&1 || true
 
@@ -19,10 +17,16 @@ if [[ -z "$volume" ]]; then
   exit 1
 fi
 
-for file in config.yaml oauth-client.json token.json; do
-  docker run --rm -i -v "${volume}:/data" alpine:3.20 sh -c "cat > /data/$file" < "$file"
+docker run --rm -i -v "${volume}:/data" alpine:3.20 sh -c "cat > /data/config.yaml" < config.yaml
+
+for file in oauth-client.json token.json; do
+  if [[ -f "$file" ]]; then
+    docker run --rm -i -v "${volume}:/data" alpine:3.20 sh -c "cat > /data/$file" < "$file"
+  fi
 done
 
-docker run --rm -v "${volume}:/data" alpine:3.20 chmod 666 /data/token.json
+if [[ -f token.json ]]; then
+  docker run --rm -v "${volume}:/data" alpine:3.20 chmod 666 /data/token.json
+fi
 
-echo "Loaded config.yaml, oauth-client.json, and token.json into volume ${volume}"
+echo "Loaded config.yaml into volume ${volume}"

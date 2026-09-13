@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Riwayat · Dashboard Clone DB{% endblock %}
+{% block heading %}Riwayat pemantauan{% endblock %}
+{% block lede %}Grafik lag, ukuran DB, disk, CPU, RAM. Pilih rentang waktu; data dari poll nyata.{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="range-row">
+    <span>Window</span>
+    <div class="pills" id="range-pills">
+      <button data-range="30m">30 minutes</button>
+      <button data-range="1h">1 hour</button>
+      <button data-range="6h">6 hours</button>
+      <button data-range="24h" class="on">24 hours</button>
+      <button data-range="7d">7 days</button>
+    </div>
+  </div>
+  <div class="charts">
+    <canvas id="chart-lag"></canvas>
+    <canvas id="chart-size"></canvas>
+    <canvas id="chart-cpu"></canvas>
+    <canvas id="chart-ram"></canvas>
+    <canvas id="chart-disk"></canvas>
+    <canvas id="chart-online"></canvas>
+  </div>
+</section>
+{% endblock %}

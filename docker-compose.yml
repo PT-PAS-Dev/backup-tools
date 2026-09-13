@@ -16,6 +16,28 @@ services:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
+  # Dashboard Clone DB (web :8090) — bukan backup Drive
+  monitor:
+    build: .
+    container_name: mariadb-clone-monitor
+    env_file: .env
+    environment:
+      TZ: Asia/Jakarta
+      CONFIG_PATH: config/config.yaml
+      MONITOR_DATA_DIR: monitor-data
+    command: uvicorn monitor.app:app --host 0.0.0.0 --port 8090
+    ports:
+      - "8090:8090"
+    volumes:
+      - backup-config:/app/config
+      - ./config.yaml:/app/config/config.yaml:ro
+      - ./monitor:/app/monitor:ro
+      - monitor-data:/app/monitor-data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
 volumes:
   backup-config:
   backup-state:
+  monitor-data:

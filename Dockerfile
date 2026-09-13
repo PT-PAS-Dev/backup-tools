@@ -26,5 +26,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backup.py auth.py drive_auth.py paths.py crontab ./
+COPY monitor /app/monitor
 
 CMD ["supercronic", "-passthrough-logs", "-no-reap", "/app/crontab"]
