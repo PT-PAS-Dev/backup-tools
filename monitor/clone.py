@@ -599,7 +599,7 @@ def _dump_restore(job_id: int, source: Node, target: Node, databases: list[str])
         dst_cnf_container = "/tmp/clone-monitor-dst.cnf"
         store.append_job_log(
             job_id,
-            f"Dump + restore via docker container {container} (mariadb-dump | mariadb di dalam container)",
+            f"Dump + restore via docker container {container} (dump ke file, import lewat stdin docker)",
         )
         _write_container_cnf(
             target,
@@ -622,37 +622,57 @@ def _dump_restore(job_id: int, source: Node, target: Node, databases: list[str])
             f"mariadb --defaults-extra-file={dst_cnf_container} "
             f"|| mysql --defaults-extra-file={dst_cnf_container}"
         )
-        import_inner = f"docker exec -i {container} sh -c {shlex.quote(import_shell_inner)}"
+        docker_import = f"docker exec -i {container} sh -c {shlex.quote(import_shell_inner)}"
         sudo_b64 = _sudo_password_b64(target) if target.docker_sudo else ""
         rm_cnf = _docker_cmd(
             target,
             f"exec {c} rm -f {shlex.quote(src_cnf)} {shlex.quote(dst_cnf_container)}",
         )
-        import_preamble = (
+        dump_sql = "/tmp/clone-monitor-dump.sql"
+        dump_err = "/tmp/clone-monitor-dump.err"
+        import_err = "/tmp/clone-monitor-import.err"
+        preamble_sql = (
             "SET SESSION innodb_strict_mode=0;\n"
             "SET NAMES utf8mb4;\n"
             "SET SESSION innodb_default_row_format='DYNAMIC';\n"
         )
-        env_exports = (
-            f"CLONE_HEADER={shlex.quote(header)} "
-            f"CLONE_MYSQL_CNF={shlex.quote(dst_cnf_container)} "
-            f"CLONE_DOCKER_IMPORT_INNER={shlex.quote(import_inner)} "
-            f"CLONE_IMPORT_PREAMBLE={shlex.quote(import_preamble)} "
-            f"CLONE_REWRITE_ROW_FORMAT=1"
-        )
-        if sudo_b64:
-            env_exports += f" CLONE_SUDO_PW_B64={shlex.quote(sudo_b64)}"
-        dump_err = "/tmp/clone-monitor-dump.err"
+        if target.docker_sudo and sudo_b64:
+            import_pipe = (
+                f"CLONE_SUDO_PW_B64={shlex.quote(sudo_b64)}; "
+                f'PW="$(printf "%s" "$CLONE_SUDO_PW_B64" | base64 -d)"; '
+                f"{{ printf '%s\\n' \"$PW\"; printf '%s' {shlex.quote(preamble_sql)}; cat {shlex.quote(dump_sql)}; }} | "
+                f"sudo -S -p '' sh -c {shlex.quote(docker_import)}"
+            )
+        elif target.docker_sudo:
+            import_pipe = (
+                f"{{ printf '%s' {shlex.quote(preamble_sql)}; cat {shlex.quote(dump_sql)}; }} | "
+                f"sudo -n sh -c {shlex.quote(docker_import)}"
+            )
+        else:
+            import_pipe = (
+                f"{{ printf '%s' {shlex.quote(preamble_sql)}; cat {shlex.quote(dump_sql)}; }} | "
+                f"sh -c {shlex.quote(docker_import)}"
+            )
         remote = (
-            "set -o pipefail; "
+            "set -euo pipefail; "
             f"{inspect} | grep -qx true || "
             f'{{ echo "Container {container} tidak jalan" >&2; exit 1; }}; '
-            f"export {env_exports}; "
-            f"{{ {dump} 2>{shlex.quote(dump_err)} | {py_pipe}; }}; "
-            f"ec=$?; "
-            f'if [ "$ec" -ne 0 ] && [ -s {shlex.quote(dump_err)} ]; then '
-            f'echo "--- mariadb-dump ---" >&2; cat {shlex.quote(dump_err)} >&2; fi; '
-            f"{rm_cnf}; rm -f {shlex.quote(dump_err)}; exit $ec"
+            f"{dump} > {shlex.quote(dump_sql)} 2>{shlex.quote(dump_err)} || "
+            f'{{ echo "--- mariadb-dump ---" >&2; cat {shlex.quote(dump_err)} >&2; exit 1; }}; '
+            f'test -s {shlex.quote(dump_sql)} || '
+            f'{{ echo "dump kosong" >&2; cat {shlex.quote(dump_err)} >&2; exit 1; }}; '
+            f"head -n 150 {shlex.quote(dump_sql)} > {shlex.quote(header)}; "
+            f"sed -i "
+            f"-e 's/ROW_FORMAT=COMPACT/ROW_FORMAT=DYNAMIC/g' "
+            f"-e 's/ROW_FORMAT=REDUNDANT/ROW_FORMAT=DYNAMIC/g' "
+            f"-e 's/ROW_FORMAT=FIXED/ROW_FORMAT=DYNAMIC/g' "
+            f"-e 's/row_format=COMPACT/row_format=DYNAMIC/g' "
+            f"-e 's/row_format=REDUNDANT/row_format=DYNAMIC/g' "
+            f"{shlex.quote(dump_sql)}; "
+            f"{import_pipe} 2>{shlex.quote(import_err)} || "
+            f'{{ echo "--- mariadb import ---" >&2; cat {shlex.quote(import_err)} >&2; exit 1; }}; '
+            f"rm -f {shlex.quote(dump_sql)} {shlex.quote(dump_err)} {shlex.quote(import_err)}; "
+            f"{rm_cnf}"
         )
     else:
         _write_remote_cnf(
