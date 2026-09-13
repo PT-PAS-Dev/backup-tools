@@ -27,14 +27,14 @@ services:
         required: false
     environment:
       TZ: Asia/Jakarta
-      CONFIG_PATH: config/config.yaml
+      # Path terpisah dari /app/config (volume backup) — hindari mount file vs folder
+      CONFIG_PATH: /app/monitor-config.yaml
       MONITOR_DATA_DIR: monitor-data
     command: ["/bin/sh", "/app/scripts/monitor-entrypoint.sh"]
     ports:
       - "${MONITOR_HOST_PORT:-8095}:8090"
     volumes:
-      - backup-config:/app/config
-      - ./config.yaml:/app/config/config.yaml:ro
+      - ./config.yaml:/app/monitor-config.yaml:ro
       - monitor-data:/app/monitor-data
     extra_hosts:
       - "host.docker.internal:host-gateway"

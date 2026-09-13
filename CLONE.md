@@ -97,6 +97,8 @@ CLONE_SSH_PASSWORD=...              # password SSH user development di .96
 
 `docker compose` bind-mount `config.yaml` ke container dashboard. Setelah ubah topology: `docker compose restart monitor`. Backup Drive: `./scripts/load-secrets.sh` jika perlu.
 
+**`config.yaml` jadi folder / mount error “not a directory”:** Jika pernah `docker compose up` tanpa file `config.yaml`, Docker bisa membuat **folder** `config.yaml`. Hapus folder itu, buat file (`cp config.example.yaml config.yaml`). Dashboard mount ke `/app/monitor-config.yaml` (bukan `/app/config/`) supaya tidak bentrok dengan volume backup. Pastikan `file config.yaml` = **regular file**. Setelah `git pull`, `docker compose up -d --build monitor`.
+
 Local run without Docker:
 
 ```bash

@@ -1,7 +1,11 @@
 #!/bin/sh
 set -eu
 
-CFG="/app/config/config.yaml"
+CFG="${CONFIG_PATH:-/app/monitor-config.yaml}"
+case "$CFG" in
+  /*) ;;
+  *) CFG="/app/$CFG" ;;
+esac
 
 if [ ! -e "$CFG" ]; then
   echo "monitor: missing $CFG — copy config.example.yaml to config.yaml on the host" >&2
