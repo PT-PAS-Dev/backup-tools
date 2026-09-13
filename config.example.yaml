@@ -26,7 +26,7 @@ topology:
       replicate_from: master-94
       ssh_user: development
       ssh_port: 22
-      docker_container: mariadb-server
+      docker_container: mysql-master
       docker_sudo: true
       label: DATABASE CLONE
     - name: clone-13-31
@@ -37,6 +37,8 @@ topology:
       replicate_from: clone-13-30
       ssh_user: development
       ssh_port: 22
+      docker_container: mysql-slave
+      docker_sudo: true
       label: DATABASE CLONE
 
 monitor:

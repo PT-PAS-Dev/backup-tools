@@ -19,15 +19,16 @@ log = logging.getLogger("clone-monitor")
 _job_lock = threading.Lock()
 
 STREAM_FILTER = r"""
-import os, sys, subprocess
+import os, sys, subprocess, shlex
 header_path = os.environ["CLONE_HEADER"]
 cnf = os.environ["CLONE_MYSQL_CNF"]
-mysql_bin = os.environ.get("CLONE_MYSQL_BIN", "mysql")
-cmd = [mysql_bin, "--defaults-extra-file=" + cnf]
-proc = subprocess.Popen(
-    cmd,
-    stdin=subprocess.PIPE,
-)
+shell_import = os.environ.get("CLONE_MYSQL_SHELL", "").strip()
+if shell_import:
+    proc = subprocess.Popen(shell_import, shell=True, stdin=subprocess.PIPE)
+else:
+    mysql_bin = os.environ.get("CLONE_MYSQL_BIN", "mysql")
+    cmd = [mysql_bin, "--defaults-extra-file=" + cnf]
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
 assert proc.stdin is not None
 saved = []
 while len(saved) < 150:
@@ -529,10 +530,10 @@ def _dump_restore(job_id: int, source: Node, target: Node, databases: list[str])
     container = (target.docker_container or "").strip()
     if container:
         c = shlex.quote(container)
-        local_mysql_host = (target.local_mysql_host or "127.0.0.1").strip()
+        dst_cnf_container = "/tmp/clone-monitor-dst.cnf"
         store.append_job_log(
             job_id,
-            f"Dump: docker container {container} (sudo); restore: {local_mysql_host}:{target.port} via client di host",
+            f"Dump + restore via docker container {container} (mariadb-dump | mariadb di dalam container)",
         )
         _write_container_cnf(
             target,
@@ -540,27 +541,33 @@ def _dump_restore(job_id: int, source: Node, target: Node, databases: list[str])
             f"[client]\nhost={source.host}\nport={source.port}\nuser={source.user}\npassword={source.password}\n",
             src_cnf,
         )
-        _write_remote_cnf(
+        _write_container_cnf(
             target,
-            f"[client]\nhost={local_mysql_host}\nuser={target.user}\npassword={target.password}\nport={target.port}\n",
-            dst_cnf,
+            container,
+            f"[client]\nuser={target.user}\npassword={target.password}\n",
+            dst_cnf_container,
         )
         inspect = _docker_cmd(target, f"inspect -f '{{{{.State.Running}}}}' {c}")
         dump = _docker_cmd(
             target,
             f"exec {c} mariadb-dump --defaults-extra-file={shlex.quote(src_cnf)} {dump_flags}{db_args}",
         )
-        rm_src = _docker_cmd(target, f"exec {c} rm -f {shlex.quote(src_cnf)}")
+        import_shell = _docker_cmd(
+            target,
+            f"exec -i {c} mariadb --defaults-extra-file={shlex.quote(dst_cnf_container)}",
+        )
+        rm_cnf = _docker_cmd(
+            target,
+            f"exec {c} rm -f {shlex.quote(src_cnf)} {shlex.quote(dst_cnf_container)}",
+        )
         remote = (
             "set -o pipefail; "
             f"{inspect} | grep -qx true || "
             f'{{ echo "Container {container} tidak jalan" >&2; exit 1; }}; '
-            'MYSQL_BIN="$(command -v mariadb 2>/dev/null || command -v mysql 2>/dev/null || true)"; '
-            'if [ -z "$MYSQL_BIN" ]; then '
-            'echo "Butuh mysql/mariadb client di host clone untuk import ke port Docker (127.0.0.1)" >&2; exit 127; fi; '
-            f"export CLONE_HEADER={shlex.quote(header)} CLONE_MYSQL_CNF={shlex.quote(dst_cnf)} CLONE_MYSQL_BIN=\"$MYSQL_BIN\"; "
+            f"export CLONE_HEADER={shlex.quote(header)} CLONE_MYSQL_CNF={shlex.quote(dst_cnf_container)} "
+            f"CLONE_MYSQL_SHELL={shlex.quote(import_shell)}; "
             f"{dump} | {py_pipe}; "
-            f"ec=$?; {rm_src}; rm -f {shlex.quote(dst_cnf)}; exit $ec"
+            f"ec=$?; {rm_cnf}; exit $ec"
         )
     else:
         _write_remote_cnf(
@@ -603,10 +610,12 @@ def _dump_restore(job_id: int, source: Node, target: Node, databases: list[str])
             if container:
                 ssh_run(
                     target,
-                    _docker_cmd(target, f"exec {shlex.quote(container)} rm -f {shlex.quote(src_cnf)}"),
+                    _docker_cmd(
+                        target,
+                        f"exec {shlex.quote(container)} rm -f {shlex.quote(src_cnf)} {shlex.quote('/tmp/clone-monitor-dst.cnf')}",
+                    ),
                     timeout=10,
                 )
-                ssh_run(target, f"rm -f {shlex.quote(dst_cnf)}", timeout=10)
             else:
                 ssh_run(target, f"rm -f {shlex.quote(src_cnf)} {shlex.quote(dst_cnf)}", timeout=10)
         except Exception:
