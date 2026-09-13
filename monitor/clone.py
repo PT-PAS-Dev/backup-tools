@@ -118,6 +118,44 @@ class CloneError(Exception):
     pass
 
 
+_DUMP_TABLE_DEF_CHANGED_RETRIES = 5
+
+
+def _dump_err_is_table_def_changed(text: str) -> bool:
+    if not text:
+        return False
+    return "1412" in text or "Table definition has changed" in text
+
+
+def _bash_per_db_dump_with_1412_retry(
+    dump_invocation: str,
+    dump_flags_common: str,
+    databases: list[str],
+    dump_sql: str,
+    dump_err: str,
+    *,
+    retries: int = _DUMP_TABLE_DEF_CHANGED_RETRIES,
+) -> str:
+    db_words = " ".join(shlex.quote(name) for name in databases)
+    q_sql = shlex.quote(dump_sql)
+    q_err = shlex.quote(dump_err)
+    return (
+        f"dump_ok=0; "
+        f"for attempt in $(seq 1 {retries}); do "
+        f": > {q_sql}; : > {q_err}; dump_fail=0; idx=0; "
+        f"for db in {db_words}; do "
+        f'md=""; if [ "$idx" -eq 0 ]; then md="--master-data=2"; fi; '
+        f"if ! {dump_invocation} {dump_flags_common}$md --databases \"$db\" >> {q_sql} 2>>{q_err}; then "
+        f"dump_fail=1; break; fi; idx=$((idx+1)); done; "
+        f'if [ "$dump_fail" -eq 0 ]; then dump_ok=1; break; fi; '
+        f"if grep -qE '1412|Table definition has changed' {q_err}; then "
+        f'echo "mariadb-dump retry $attempt/'
+        f'{retries} (1412 — definisi tabel berubah)..." >> {q_err}; '
+        f"sleep $((attempt * 5)); continue; fi; break; done; "
+        f'if [ "$dump_ok" -ne 1 ]; then echo "--- mariadb-dump ---" >&2; cat {q_err} >&2; exit 1; fi'
+    )
+
+
 def _assert_clone_target(topology: Topology, target: Node) -> None:
     if target.role != "clone":
         raise SafetyError(f"{target.name} is not a clone target")
@@ -586,10 +624,11 @@ def _dump_restore(job_id: int, source: Node, target: Node, databases: list[str])
     dst_cnf = "/tmp/clone-monitor-dst.cnf"
     header = "/tmp/clone-monitor.header"
     db_args = " ".join(shlex.quote(name) for name in databases)
-    dump_flags = (
+    dump_flags_common = (
         "--single-transaction --quick --routines --triggers --events --hex-blob "
-        "--default-character-set=utf8mb4 --master-data=2 --databases "
+        "--default-character-set=utf8mb4 "
     )
+    dump_flags = f"{dump_flags_common}--master-data=2 --databases "
     encoded = base64.b64encode(STREAM_FILTER.encode()).decode("ascii")
     py_pipe = f'python3 -c "import base64; exec(base64.b64decode(\'{encoded}\').decode())"'
 
@@ -614,9 +653,16 @@ def _dump_restore(job_id: int, source: Node, target: Node, databases: list[str])
             dst_cnf_container,
         )
         inspect = _docker_cmd(target, f"inspect -f '{{{{.State.Running}}}}' {c}")
-        dump = _docker_cmd(
+        dump_invocation = _docker_cmd(
             target,
-            f"exec {c} mariadb-dump --defaults-extra-file={shlex.quote(src_cnf)} {dump_flags}{db_args}",
+            f"exec {c} mariadb-dump --defaults-extra-file={shlex.quote(src_cnf)}",
+        )
+        dump_step = _bash_per_db_dump_with_1412_retry(
+            dump_invocation,
+            dump_flags_common,
+            databases,
+            dump_sql="/tmp/clone-monitor-dump.sql",
+            dump_err="/tmp/clone-monitor-dump.err",
         )
         import_shell_inner = (
             f"mariadb --defaults-extra-file={dst_cnf_container} "
@@ -660,8 +706,7 @@ def _dump_restore(job_id: int, source: Node, target: Node, databases: list[str])
             "set -euo pipefail; "
             f"{inspect} | grep -qx true || "
             f'{{ echo "Container {container} tidak jalan" >&2; exit 1; }}; '
-            f"{dump} > {shlex.quote(dump_sql)} 2>{shlex.quote(dump_err)} || "
-            f'{{ echo "--- mariadb-dump ---" >&2; cat {shlex.quote(dump_err)} >&2; exit 1; }}; '
+            f"{dump_step}; "
             f'test -s {shlex.quote(dump_sql)} || '
             f'{{ echo "dump kosong" >&2; cat {shlex.quote(dump_err)} >&2; exit 1; }}; '
             f"head -n 150 {shlex.quote(dump_sql)} > {shlex.quote(header)}; "
@@ -711,9 +756,25 @@ def _dump_restore(job_id: int, source: Node, target: Node, databases: list[str])
     progress = threading.Thread(target=_watch_progress, args=(job_id, source, target, stop), daemon=True)
     progress.start()
     try:
-        code, out, err = ssh_run(target, remote, timeout=60 * 60 * 12)
-        if code != 0:
-            raise CloneError((err or out or f"dump exit {code}")[:4000])
+        last_err = ""
+        ok = False
+        for attempt in range(1, _DUMP_TABLE_DEF_CHANGED_RETRIES + 1):
+            code, out, err = ssh_run(target, remote, timeout=60 * 60 * 12)
+            if code == 0:
+                ok = True
+                break
+            last_err = (err or out or f"dump exit {code}")[:4000]
+            if attempt < _DUMP_TABLE_DEF_CHANGED_RETRIES and _dump_err_is_table_def_changed(last_err):
+                store.append_job_log(
+                    job_id,
+                    f"Dump gagal (1412 / definisi tabel berubah), retry {attempt}/"
+                    f"{_DUMP_TABLE_DEF_CHANGED_RETRIES} — tunggu ALTER/migrasi di source selesai",
+                )
+                time.sleep(attempt * 5)
+                continue
+            raise CloneError(last_err)
+        if not ok:
+            raise CloneError(last_err or "dump failed")
         store.append_job_log(job_id, "Dump/restore stream finished")
         _store_header(job_id, target, header)
     finally:

@@ -125,6 +125,8 @@ Progress: while restore runs, the monitor compares clone `information_schema` si
 
 **Import error `Row size too large (1118)`:** Clone job rewrites `ROW_FORMAT=COMPACT|REDUNDANT|FIXED` → `DYNAMIC` in the dump (MariaDB does not allow `SET SESSION innodb_default_row_format`). If it still fails, set on the **clone** MariaDB (`mysql-master` / `my.cnf`): `innodb_default_row_format=DYNAMIC`, restart container, drop partial DB, clone again. Rare wide rows may need schema changes on production (TEXT/BLOB) — that is outside this tool.
 
+**Dump error `1412` / `Table definition has changed`:** Something ran `ALTER` (or similar DDL) on the source while `mariadb-dump --single-transaction` was reading that table (e.g. `gps_tracking`). The job dumps **per database** and **retries up to 5 times** with backoff. Pause migrations/DDL on the source during initial clone, or re-run clone when the table is stable.
+
 ## Alerts
 
 `SOURCE_DOWN`, `CLONE_DOWN`, `REPLICATION_STOPPED`, `REPLICATION_ERROR`, `REPLICATION_LAG`, `BINLOG_RETENTION_RISK`, `DISK_LOW`, `CPU_HIGH`, `RAM_HIGH`, `DATABASE_GROWTH`.
