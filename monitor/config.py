@@ -184,11 +184,27 @@ def _as_node(raw: dict[str, Any], role: str) -> Node:
     return node
 
 
+def _apply_connection_env(node: Node, connection_name: str) -> None:
+    name = connection_name.strip()
+    if not name:
+        return
+    env_user = _opt_env(env_key("MYSQL_USER", name))
+    env_password = _opt_env(env_key("MYSQL_PASSWORD", name))
+    if env_user:
+        node.user = env_user
+    if env_password:
+        node.password = env_password
+
+
 def _apply_backup_connection(node: Node, connections: list[dict[str, Any]]) -> None:
+    link = (node.connection or "").strip()
+    if link:
+        _apply_connection_env(node, link)
+
     match: dict[str, Any] | None = None
-    if node.connection:
+    if link:
         for item in connections:
-            if str(item.get("name") or "") == node.connection:
+            if str(item.get("name") or "") == link:
                 match = item
                 break
     if match is None:
@@ -199,15 +215,11 @@ def _apply_backup_connection(node: Node, connections: list[dict[str, Any]]) -> N
     if not match:
         return
     conn_name = str(match.get("name") or "")
-    env_user = _opt_env(env_key("MYSQL_USER", conn_name))
-    env_password = _opt_env(env_key("MYSQL_PASSWORD", conn_name))
-    if env_user:
-        node.user = env_user
-    elif not node.user:
+    if conn_name and conn_name != link:
+        _apply_connection_env(node, conn_name)
+    if not node.user:
         node.user = str(match.get("user") or "")
-    if env_password:
-        node.password = env_password
-    elif not node.password:
+    if not node.password:
         node.password = str(match.get("password") or "")
 
 

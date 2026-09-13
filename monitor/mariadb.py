@@ -4,7 +4,7 @@ from typing import Any
 
 import pymysql
 
-from monitor.config import SYSTEM_SCHEMAS, Node
+from monitor.config import SYSTEM_SCHEMAS, Node, env_key
 
 SOURCE_OK_PREFIXES = ("SELECT", "SHOW")
 CONNECT_TIMEOUT = 6
@@ -33,7 +33,17 @@ def connect(
     read_timeout: int | None = None,
 ) -> pymysql.connections.Connection:
     if not node.user:
-        raise MariaError(f"{node.name}: MySQL user is not configured")
+        hints: list[str] = []
+        if node.connection:
+            hints.append(env_key("MYSQL_USER", node.connection))
+            hints.append(env_key("MYSQL_PASSWORD", node.connection))
+        hints.append(env_key("CLONE_MYSQL_USER", node.name))
+        hints.append(env_key("CLONE_MYSQL_PASSWORD", node.name))
+        env_hint = ", ".join(dict.fromkeys(hints))
+        raise MariaError(
+            f"{node.name}: MySQL user is not configured — set in .env (e.g. {env_hint}) "
+            "then: docker compose up -d --force-recreate monitor"
+        )
     rt = read_timeout if read_timeout is not None else READ_TIMEOUT_LIGHT
     try:
         conn = pymysql.connect(

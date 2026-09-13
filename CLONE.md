@@ -97,7 +97,7 @@ Add a `topology` block to `config.yaml` (see `config.example.yaml`). Source can 
 
 Nama env = prefix + **nama node/connection** dari YAML (huruf besar, `-` jadi `_`). `MONITOR_*` / password di YAML masih didukung sebagai fallback, tidak disarankan.
 
-`docker compose` bind-mount `config.yaml` ke container dashboard. Setelah ubah topology: `docker compose restart monitor`. Backup Drive: `./scripts/load-secrets.sh` jika perlu.
+`docker compose` bind-mount config via `monitor-config/`. Setelah ubah **`.env`** atau topology: `docker compose up -d --force-recreate monitor` (`restart` saja **tidak** memuat ulang variabel dari `.env`). Backup Drive: `./scripts/load-secrets.sh` jika perlu.
 
 **Monitor `Restarting (1)` / `Permission denied` pada config:** Jangan pakai `/scripts/...` — jalankan **`./scripts/setup-monitor-config.sh`** dari folder repo. Dashboard mount **`monitor-config/config.yaml`** (bukan bind file `config.yaml` langsung). Lalu `docker compose up -d --force-recreate monitor`. SELinux: `chmod 644 monitor-config/config.yaml` dan `chcon -Rt container_file_t monitor-config`. Cek: `docker compose run --rm --no-deps monitor cat /app/monitor-config/config.yaml | head -3`. `./scripts/diagnose-monitor.sh` untuk ringkasan.
 
