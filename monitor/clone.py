@@ -622,37 +622,41 @@ def _dump_restore(job_id: int, source: Node, target: Node, databases: list[str])
             f"mariadb --defaults-extra-file={dst_cnf_container} "
             f"|| mysql --defaults-extra-file={dst_cnf_container}"
         )
-        docker_import = f"docker exec -i {container} sh -c {shlex.quote(import_shell_inner)}"
         sudo_b64 = _sudo_password_b64(target) if target.docker_sudo else ""
         rm_cnf = _docker_cmd(
             target,
             f"exec {c} rm -f {shlex.quote(src_cnf)} {shlex.quote(dst_cnf_container)}",
         )
         dump_sql = "/tmp/clone-monitor-dump.sql"
+        combined_sql = "/tmp/clone-monitor-combined.sql"
         dump_err = "/tmp/clone-monitor-dump.err"
         import_err = "/tmp/clone-monitor-import.err"
-        preamble_sql = (
-            "SET SESSION innodb_strict_mode=0;\n"
-            "SET NAMES utf8mb4;\n"
-            "SET SESSION innodb_default_row_format='DYNAMIC';\n"
+        build_combined = (
+            f"{{ "
+            f"echo 'SET SESSION innodb_strict_mode=0;' > {shlex.quote(combined_sql)}; "
+            f"echo 'SET NAMES utf8mb4;' >> {shlex.quote(combined_sql)}; "
+            f"echo \"SET SESSION innodb_default_row_format='DYNAMIC';\" >> {shlex.quote(combined_sql)}; "
+            f"cat {shlex.quote(dump_sql)} >> {shlex.quote(combined_sql)}; "
+            f"}}"
+        )
+        import_bash = (
+            f"docker exec -i {container} sh -c {shlex.quote(import_shell_inner)} "
+            f"< {shlex.quote(combined_sql)}"
         )
         if target.docker_sudo and sudo_b64:
-            import_pipe = (
+            import_step = (
                 f"CLONE_SUDO_PW_B64={shlex.quote(sudo_b64)}; "
                 f'PW="$(printf "%s" "$CLONE_SUDO_PW_B64" | base64 -d)"; '
-                f"{{ printf '%s\\n' \"$PW\"; printf '%s' {shlex.quote(preamble_sql)}; cat {shlex.quote(dump_sql)}; }} | "
-                f"sudo -S -p '' sh -c {shlex.quote(docker_import)}"
+                f"{build_combined}; "
+                f"echo \"$PW\" | sudo -S -p '' bash -c {shlex.quote(import_bash)}"
             )
         elif target.docker_sudo:
-            import_pipe = (
-                f"{{ printf '%s' {shlex.quote(preamble_sql)}; cat {shlex.quote(dump_sql)}; }} | "
-                f"sudo -n sh -c {shlex.quote(docker_import)}"
+            import_step = (
+                f"{build_combined}; "
+                f"sudo -n bash -c {shlex.quote(import_bash)}"
             )
         else:
-            import_pipe = (
-                f"{{ printf '%s' {shlex.quote(preamble_sql)}; cat {shlex.quote(dump_sql)}; }} | "
-                f"sh -c {shlex.quote(docker_import)}"
-            )
+            import_step = f"{build_combined}; bash -c {shlex.quote(import_bash)}"
         remote = (
             "set -euo pipefail; "
             f"{inspect} | grep -qx true || "
@@ -669,9 +673,9 @@ def _dump_restore(job_id: int, source: Node, target: Node, databases: list[str])
             f"-e 's/row_format=COMPACT/row_format=DYNAMIC/g' "
             f"-e 's/row_format=REDUNDANT/row_format=DYNAMIC/g' "
             f"{shlex.quote(dump_sql)}; "
-            f"{import_pipe} 2>{shlex.quote(import_err)} || "
+            f"{import_step} 2>{shlex.quote(import_err)} || "
             f'{{ echo "--- mariadb import ---" >&2; cat {shlex.quote(import_err)} >&2; exit 1; }}; '
-            f"rm -f {shlex.quote(dump_sql)} {shlex.quote(dump_err)} {shlex.quote(import_err)}; "
+            f"rm -f {shlex.quote(dump_sql)} {shlex.quote(combined_sql)} {shlex.quote(dump_err)} {shlex.quote(import_err)}; "
             f"{rm_cnf}"
         )
     else:
