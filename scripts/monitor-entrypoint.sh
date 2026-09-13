@@ -1,14 +1,22 @@
 #!/bin/sh
 set -eu
 
+readable_config() {
+  [ -f "$1" ] && [ -r "$1" ]
+}
+
 resolve_config() {
-  _want="${CONFIG_PATH:-/app/monitor-config.yaml}"
-  case "$_want" in
-    /*) ;;
-    *) _want="/app/$_want" ;;
-  esac
-  for _c in "$_want" /app/monitor-config.yaml /app/monitor-config/config.yaml; do
-    if [ -f "$_c" ]; then
+  for _c in \
+    /app/monitor-config/config.yaml \
+    "${CONFIG_PATH:-}" \
+    /app/monitor-config.yaml
+  do
+    [ -z "$_c" ] && continue
+    case "$_c" in
+      /*) ;;
+      *) _c="/app/$_c" ;;
+    esac
+    if readable_config "$_c"; then
       printf '%s' "$_c"
       return 0
     fi
@@ -22,15 +30,14 @@ case "$PORT" in
 esac
 
 if ! CFG="$(resolve_config)"; then
-  echo "monitor: no config file found (tried CONFIG_PATH, /app/monitor-config.yaml, /app/monitor-config/config.yaml)" >&2
-  echo "monitor: on the host: test -f config.yaml && docker compose config | grep -A3 monitor-config" >&2
-  echo "monitor: or: ./scripts/setup-monitor-config.sh && docker compose up -d monitor" >&2
+  echo "monitor: no readable config (expected /app/monitor-config/config.yaml)" >&2
+  echo "monitor: on the host: cd .../backup-tools && ./scripts/setup-monitor-config.sh" >&2
+  echo "monitor: SELinux: chmod 644 monitor-config/config.yaml; chcon -Rt container_file_t monitor-config" >&2
   exit 1
 fi
 
 if [ -d "$CFG" ]; then
   echo "monitor: $CFG is a directory inside the container." >&2
-  echo "monitor: on the host: docker compose stop monitor && rm -rf config.yaml && cp config.example.yaml config.yaml" >&2
   exit 1
 fi
 

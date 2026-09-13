@@ -24,12 +24,13 @@ echo ""
 echo "=== One-shot test in image ==="
 docker compose run --rm --no-deps --entrypoint /bin/sh monitor -c '
 set -eu
-CFG="${CONFIG_PATH:-/app/monitor-config.yaml}"
-echo "CONFIG_PATH=$CFG"
-ls -la "$CFG" 2>&1 || true
-if [ -d "$CFG" ]; then echo "RESULT: FAIL — config ter-mount sebagai folder"; exit 1
-elif [ ! -f "$CFG" ]; then echo "RESULT: FAIL — bukan file"; exit 1
-else echo "RESULT: OK — file config"; fi
+CFG=/app/monitor-config/config.yaml
+echo "CONFIG_PATH=${CONFIG_PATH:-}"
+ls -la /app/monitor-config/ 2>&1 || true
+if [ -r "$CFG" ]; then echo "RESULT: OK — readable config"; head -2 "$CFG"
+elif [ -f "$CFG" ]; then echo "RESULT: FAIL — file ada tapi tidak bisa dibaca (SELinux?)"; exit 1
+else echo "RESULT: FAIL — jalankan ./scripts/setup-monitor-config.sh di host"; exit 1
+fi
 echo "MONITOR_PORT=${MONITOR_PORT:-<unset>}"
 python3 -c "from monitor.app import app; print(\"import OK\")"
 '

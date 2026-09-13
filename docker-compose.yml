@@ -27,15 +27,13 @@ services:
         required: false
     environment:
       TZ: Asia/Jakarta
-      # Path terpisah dari /app/config (volume backup) — hindari mount file vs folder
-      CONFIG_PATH: /app/monitor-config.yaml
+      CONFIG_PATH: /app/monitor-config/config.yaml
       MONITOR_DATA_DIR: monitor-data
     command: ["/bin/sh", "/app/scripts/monitor-entrypoint.sh"]
     ports:
       - "${MONITOR_HOST_PORT:-8095}:8090"
     volumes:
-      # Short bind (kompatibel compose lama); :z untuk SELinux (RHEL). Fallback: monitor-config/config.yaml
-      - ./config.yaml:/app/monitor-config.yaml:ro,z
+      # Folder saja (hindari bind file + SELinux "Permission denied"). Isi: ./scripts/setup-monitor-config.sh
       - ./monitor-config:/app/monitor-config:ro,z
       - monitor-data:/app/monitor-data
     extra_hosts:
